@@ -20,6 +20,11 @@ void do_beep(void)
 {
 }
 
+void *memmove(void *dest, const void *src, size_t n) {
+	memcpy(dest, src, n);
+}
+
+
 /*
  * Map handling: allocate 3 banks per process
  */

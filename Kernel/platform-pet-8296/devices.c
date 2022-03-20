@@ -23,7 +23,11 @@ struct devsw dev_tab[] =  /* The device driver switch table */
   {  no_open,	    no_close,	no_rdwr,	no_rdwr,	no_ioctl},
 #endif
   /* 2: /dev/tty	TTY devices */
+#ifdef _NOOPE
   {  tty_open,     tty_close,   tty_read,  tty_write,  tty_ioctl },
+#else
+  {  no_open,	    no_close,	no_rdwr,	no_rdwr,	no_ioctl},
+#endif
   /* 3: /dev/lpr	Printer devices */
   {  no_open,     no_close,   no_rdwr,   no_rdwr,  no_ioctl  },
   /* 4: /dev/mem etc	System devices (one offs) */

@@ -25,6 +25,7 @@
 	    .export vector
 	    .export _sys_stubs
 
+		.import _vtoutput
 	    .import interrupt_handler
 	    .import _udata
 	    .import _ramsize
@@ -62,7 +63,7 @@
 _platform_monitor:
 _platform_reboot:
 	    lda #0
-	    sta $FE7B		; top 16K to ROM 0
+	    sta $FFF0		; disable exp ram, enable roms
 	    jmp ($FFFC)
 
 ___hard_di:
@@ -92,9 +93,10 @@ init_early:
 	    ; Hack for now - create a common copy for init. We should then
 	    ; recycle page 32 into a final process but that means awkward
 	    ; handling - or does it - we wrap the bit ?? FIXME
-	    jsr _create_init_common
-	    lda #36
-	    sta $FE78		; set low page to copy
+	    JSR _create_init_common
+; disabled HS
+;	    lda #36
+;	    sta $FE78		; set low page to copy
             rts			; stack was copied so this is ok
 
 init_hardware:
@@ -107,7 +109,7 @@ init_hardware:
 	    sta _procmem
 	    lda #1
 	    sta _procmem+1
-            jmp program_vectors_k
+        jmp program_vectors_k
 
 	    ; copied into the stubs of each binary
 _sys_stubs:
@@ -192,7 +194,7 @@ map_process:
 	    bne map_process_2
 ;
 ;	Map in the kernel below the current common, all registers preserved
-;	the kernel lives in 32/33/34/35
+;	the kernel lives in bank 0
 ;	Later we'll be clever and stuff _DISCARD and the copy blocks there or
 ;	something (that would also let us put RODATA in
 ;	common area just to balance out memory usages).
@@ -202,7 +204,7 @@ map_kernel:
 	    txa
 	    pha
 				; Common is left untouched as is ZP and S
-	    ldx #$20		; Kernel RAM
+	    ldx #0		; Kernel RAM
 	    jsr map_bank_i
 	    pla
 	    tax
@@ -210,23 +212,26 @@ map_kernel:
 	    rts
 
 ;
-;	Entry point to map a linear bank range. We switch 4000-FFFF
-;	0000-3FFF are switched on the task switch so are valid for
-;	map_process_always cases but not mapping an arbitrary process.
-;	This is ok - when we add swap it uses map_for_swap and that will map
-;	a 16K window in and out (which will need us to fix save/restore)
+;	Entry point to map a bank (0..2) We switch 8000-FFFF
 ;
-map_bank:
-	    stx $FE78
-map_bank_i:			; We are not mapping the first user page yet
-	    stx cur_map
-	    inx
-	    stx $FE79
-	    inx
-	    stx $FE7A
-	    inx
-	    stx $FE7B
-	    rts
+map_bank_i:		
+		CMP #0
+		BNE @next
+		;map bank zero (base map)
+		; set cr0 to zero, VIA pa0..pa2 should already be set
+		LDA #0
+		STA CR0
+		RTS
+@next:
+		CMP #1 
+		BNE @next1
+		lda $80 ; map page 2 and 0 (bank 1, ext mem)
+		STA CR0
+		RTS
+@next1: 
+		LDA $86 ; map page 3 and 1 (bank 2, ext mem)
+		STA CR0
+		RTS
 
 ; X,A holds the map table of this process
 map_process_2:
@@ -276,19 +281,23 @@ map_save_kernel:
 cur_map:    .byte 0
 saved_map:  .byte 0
 
-; outchar: Wait for UART TX idle, then print the char in a without
-; corrupting other registers
+; outchar: forward to console
 
 outchar:
-	    pha
-outcharw:
-	    lda $FEC5
-	    and #$20
-	    beq outcharw
-	    pla
-	    sta $FEC0
-	    rts
-
+    PHA
+	TXA
+	pha
+	tya
+	pha
+	JSR map_kernel
+	JSR  _vtoutput
+	PLA
+	TAY
+	PLA
+	TAX
+	PLA
+	RTS
+	
 ;
 ;	Code that will live in each bank at the same address and is copied
 ;	there on 6509 type setups. On 6502 it may well be linked once in

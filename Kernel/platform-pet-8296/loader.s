@@ -1,13 +1,40 @@
 ;
 ;	We are loaded at $0200.
-;	0000-7FFF are RAM 8000-FFFF ROM (except I/O)
+;	0000-7FFF are RAM 8000-FFFF ROM (except Video and I/O)
 ;
 ;	We switch to all RAM and then load an image from 0400-FDFF
 ;	and then jump to 4002 if the marker is right
 ;
+;  0xFFF0 memory control byte
+;  BIT 
+;  0 - 1 = WriteProtect $8000 - $BFFF
+;  1 - 1 = WriteProtect $C000 - $FFFF
+;  2     0 0:  2 and 0,  0 1:  2 and 1
+;  3     1 0:  3 and 0,  1 1:  3 and 1
+;  4 - 1 = reserved
+;  5 - 1 = Screen peek $8000-$8FFF 
+;  6 - 1 = I/O peek $E800-$EFFF  
+;  7 - 1 = enable memory expansion
+;
+; to read io enable i/o peek, to write i/o enable i/o peek and write protect $c000
+; to read video enable video peek, to write video enable video peek AND write protect $8000
+; 
+
+ENABLE    = $80
+IO_PEEK   = $40
+VID_PEEK  = $20
+KERN_PAGE = $00 
+USER_PAGE = $06
+
+CR0		  = $FFF0
+VIA		  = $E840
+IDE		  = $FF80
+; pet kernel char out routine (only availble when roms are mapped in!)
+chrout  = $FFD2 
 
 	.zeropage
 ptr1:	.res	2
+ptr2:	.res	2
 sector:	.res	1
 
 	.segment "CODE"
@@ -16,13 +43,22 @@ sector:	.res	1
 	.byte $02
 start:
 	; Map the full 64K to RAM
-	lda #34
-	sta $FE7A
-	lda #35
-	sta $FE7B
-	; Our map is now 32 33 34 35
+	; enable ram_on AND ram_9 by setting via pa0, pa1 and pa2 to zero
+	SEI ; disable interrupts
+	lda VIA+3
+	ORA #7
+	sta VIA+3
+	LDA VIA+1
+	AND #$F8
+	STA VIA+1
+	; set cr0 bits 7+6 to zero
+	LDA $3F
+	ORA CR0	
+	sta CR0
+	; now we should have ram except at $8000 and $FF00 - $FF3F 
 
-	lda #$00
+	LDA #$00
+	sta ptr2
 	sta ptr1
 	lda #$04
 	sta ptr1+1
@@ -30,93 +66,84 @@ start:
 	lda #$01	; 0 is the partition/boot block
 	sta sector
 
-	lda #'['
-	jsr outchar
 	jsr waitready
-	lda #']'
-	jsr outchar
 	lda #$E0
-	sta $FE16	; Make sure we are in LBA mode
+	sta IDE+6	; Make sure we are in LBA mode
 dread:
 	jsr waitready
-	lda #'.'
-	jsr outchar
 	lda sector
 	cmp #$7D	; loaded all of the image ?
 	beq load_done
 	inc sector
-	sta $FE13
+	sta IDE+3
 	lda #$01
-	sta $FE12	; num sectors (drives may clear this each I/O)
+	sta IDE+2	; num sectors (drives may clear this each I/O)
 	jsr waitready
 	lda #$20
-	sta $FE17	; read command
+	sta IDE+7	; read command
 
-	lda #'D'
-	jsr outchar
 	jsr waitdrq
-	lda #'d'
-	jsr outchar
 
 	lda ptr1+1	; skip the I/O page
 	ldy #0
 bytes1:
-	lda $FE10
+	lda IDE
 	sta (ptr1),y
 	iny
 	bne bytes1
 	inc ptr1+1
 bytes2:
-	lda $FE10
+	lda IDE
 	sta (ptr1),y
 	iny
 	bne bytes2
 	inc ptr1+1
-	lda #'X'
-	jsr outchar
 	jmp dread
 
 load_done:
-	lda $4000
+	lda $2000
 	cmp #$02
 	bne bad_load
-	lda $4001
+	lda $2001
 	cmp #$65
 	bne bad_load
 
-	ldx #>running
-	lda #<running
-	jsr outstring
-	jmp $4002
+	jmp $2002
 
 bad_load:
-	ldx #>badimg
-	lda #<badimg
-	jsr outstring
-	lda $FE16
+    ; enable rom
+	LDA #3
+	ORA VIA+3 
+	; geht nicht weil alles gelöscht
+;	ldx #>badimg
+;	lda #<badimg
+;	JSR outstring
+	jmp ($fffc)	
+	
+	lda IDE+6
 	jsr outcharhex
-	lda $FE15
+	lda IDE+5
 	jsr outcharhex
-	lda $FE14
+	lda IDE+4
 	jsr outcharhex
-	lda $FE13
+	lda IDE+3
 	jsr outcharhex
 stop:
 	jmp stop
 
 waitready:
-	lda $FE17
+	lda IDE+7
 	and #$40
 	beq waitready
 	rts
 
 waitdrq:
-	lda $FE17
+	lda IDE+7
 	and #$09
 	beq waitdrq
 	and #$01
 	beq wait_drq_done
-	lda $FE11
+	lda IDE+1
 	jsr outcharhex
 	jmp bad_load
 
@@ -151,13 +178,8 @@ outcharhex1:
 	bcc outchar
 	adc #7
 outchar:
-	pha
 outcharw:
-	lda $FEC5
-	and #$20
-	beq outcharw
-	pla
-	sta $FEC0
+    jsr chrout
 outdone1:
 	rts
 badimg:

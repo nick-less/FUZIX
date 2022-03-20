@@ -7,11 +7,19 @@
 #include <vt.h>
 #include <tty.h>
 
-/* 16550A at FEC0 */
-static volatile uint8_t *uart = (volatile uint8_t *)0xFEC0;
+#define kbd_read ((volatile uint8_t *)0xE810)
+#define kbd_strobe ((volatile uint8_t *)0xE812)
+#define irq_check ((volatile uint8_t *)0xE840)
+#define irq_reset ((volatile uint8_t *)0xE840)
+
+#define NUM_COLS 80
 
 static char tbuf1[TTYSIZ];
 PTY_BUFFERS;
+
+uint8_t vtattr_cap = 0;
+
+static uint8_t *vtmap = 0x8000;
 
 struct s_queue ttyinq[NUM_DEV_TTY + 1] = {	/* ttyinq[0] is never used */
 	{NULL, NULL, NULL, 0, 0, 0},
@@ -21,56 +29,76 @@ struct s_queue ttyinq[NUM_DEV_TTY + 1] = {	/* ttyinq[0] is never used */
 
 tcflag_t termios_mask[NUM_DEV_TTY + 1] = {
 	0,
-	_CSYS	/* TODO */
+	_CSYS	/* Nothing configurable */
 };
 
+/* tty1 is the screen tty2+ are the serial ports */
+
 /* Output for the system console (kprintf etc) */
-void kputchar(uint8_t c)
+void kputchar(char c)
 {
 	if (c == '\n')
 		tty_putc(1, '\r');
 	tty_putc(1, c);
 }
 
-ttyready_t tty_writeready(uint8_t minor)
+ttyready_t tty_writeready(uint_fast8_t minor)
 {
-	if (uart[5] & 0x20)
-	        return TTY_READY_NOW;
-	return TTY_READY_SOON;
+        return TTY_READY_NOW;
 }
 
-void tty_putc(uint8_t minor, unsigned char c)
+void tty_putc(uint_fast8_t minor, uint_fast8_t c)
 {
-	while(!(uart[5] & 0x20));
-	uart[0] = c;
+        vtoutput(&c,1);
 }
 
-void tty_setup(uint8_t minor, uint8_t flag)
+void tty_setup(uint_fast8_t minor, uint_fast8_t flags)
 {
+        minor;
 }
 
-void tty_sleeping(uint8_t minor)
+void tty_sleeping(uint_fast8_t minor)
 {
+        minor;
 }
 
-/* For the moment */
-int tty_carrier(uint8_t minor)
+int tty_carrier(uint_fast8_t minor)
 {
-	return 1;
+        minor;
+        return 1;
 }
 
-void tty_data_consumed(uint8_t minor)
+void tty_data_consumed(uint_fast8_t minor)
 {
 }
-
+/* Beware - this kbd access also disables 80store */
 void tty_poll(void)
 {
         uint8_t x;
         
-        x = uart[5] & 1;
-        if (x) {
-        	x = uart[0];
-		tty_inproc(1, x);
+        x = *kbd_read;
+        if (x & 0x80) {
+		tty_inproc(1, x & 0x7F);
+		x = *kbd_strobe;
 	}
 }
-                
+
+uint8_t check_timer(void)
+{
+	/* For now asume mouse card IIc - hack. Once we have proper IRQ
+	   handling in place we can key this appropriately */
+	if (*irq_check & 0x80) {
+		*irq_reset;
+		return 1;
+	}
+	return 0;
+}
+
+// void platform_interrupt(void)
+// {
+// 	tty_poll();
+// 	if (check_timer())
+// 		timer_interrupt();
+// }
+
+

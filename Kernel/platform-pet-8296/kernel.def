@@ -4,5 +4,7 @@
 ; 256+256 bytes.
 U_DATA__TOTALSIZE           .set $200
 
-PROGLOAD		    .set $2000
+PROGLOAD		    .set $8000
 ZPBASE			    .set $0
+
+CR0 = $FFF0

@@ -335,11 +335,11 @@ copy1:
 	rts
 
 _create_init_common:
-	lda #32
-	sta $FE79		;	set the map for 0x4000
-	lda #36
-	sta $FE7A		;	and 0x8000
-	jsr bank2bank
+;	lda #32
+;	sta $FE79		;	set the map for 0x4000
+;	lda #36
+;	sta $FE7A		;	and 0x8000
+;	jsr bank2bank
 	jmp map_kernel
 ;
 ;	The switch proc pointer cannot live anywhere in common as we switch
