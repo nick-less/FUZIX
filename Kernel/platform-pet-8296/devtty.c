@@ -75,7 +75,6 @@ void tty_data_consumed(uint_fast8_t minor)
 void tty_poll(void)
 {
         uint8_t x;
-        
         x = *kbd_read;
         if (x & 0x80) {
 		tty_inproc(1, x & 0x7F);

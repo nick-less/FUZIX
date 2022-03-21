@@ -26,16 +26,18 @@ void *memmove(void *dest, const void *src, size_t n) {
 
 
 /*
- * Map handling: allocate 3 banks per process
+ * Map handling: allocate 1 banks per process
  */
 
 void pagemap_init(void)
 {
-    int i;
+	pagemap_add(1);
+	pagemap_add(2);
+ //   int i;
     /* Add the user banks, taking care to land 36 as the last one as we
        use that for init  (32-35 are the kernel) */
-    for (i = 6; i >= 0; i--)
-        pagemap_add(36 + i * 4);
+//    for (i = 6; i >= 0; i--)
+//        pagemap_add(36 + i * 4);
 }
 
 void map_init(void)
@@ -47,10 +49,11 @@ uint8_t platform_param(char *p)
     return 0;
 }
 
-static volatile uint8_t *via = (volatile uint8_t *)0xFE60;
+static volatile uint8_t *via = (volatile uint8_t *)0xe840;
 
 void device_init(void)
 {
+
 #ifdef CONFIG_IDE
 	devide_init();
 #endif

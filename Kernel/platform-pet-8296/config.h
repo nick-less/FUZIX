@@ -17,15 +17,13 @@
 
 /*
  *	128 RAM (swap yet to do )
- *	Question: is common better top or bottom ?
- *	Top means we switch ZP and 6502 stacks, bottom means we don't but
- *	have to copy stuff/watching sharing
+ *  common is bottom on this platform
  */
 #define CONFIG_BANK_FIXED
 #define MAX_MAPS 	3   /* 2 x 32K */
 #define MAP_SIZE    0x8000
 
-#define TICKSPERSEC 100	    /* Ticks per second */
+#define TICKSPERSEC 60	    /* Ticks per second */
 
 /* We've not yet made the rest of the code - eg tricks match this ! */
 #define MAPBASE	    0x8000  /* We map from 0x8000 */
@@ -62,6 +60,6 @@ extern void *memmove(void *dest, const void *src, size_t n);
 #define VT_BOTTOM 25
 
 #define platform_discard()
-#define platform_copyright()
+#define platform_copyright() kprintf("plattform copyright")
 
 #define BOOTDEVICENAMES "hd#"
