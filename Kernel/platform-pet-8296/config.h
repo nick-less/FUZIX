@@ -25,6 +25,12 @@
 
 #define TICKSPERSEC 60	    /* Ticks per second */
 
+
+
+#define IO_PEEK_ENABLE *((volatile uint8_t *)0xfff0) = 0x40
+#define IO_PEEK_DISABLE *((volatile uint8_t *)0xfff0) = 0x00
+
+
 /* We've not yet made the rest of the code - eg tricks match this ! */
 #define MAPBASE	    0x8000  /* We map from 0x8000 */
 #define PROGBASE    0x8000  /* also data base */
@@ -59,7 +65,9 @@ extern void *memmove(void *dest, const void *src, size_t n);
 #define VT_RIGHT 80
 #define VT_BOTTOM 25
 
-#define platform_discard()
-#define platform_copyright() kprintf("plattform copyright")
+#define VT_MAP_CHAR(x)  vt_map_petscii(x)
 
-#define BOOTDEVICENAMES "hd#"
+#define platform_discard()
+#define platform_copyright() kprintf("cbm 8296\r")
+
+#define BOOTDEVICENAMES "hd2"

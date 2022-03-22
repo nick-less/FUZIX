@@ -103,7 +103,7 @@ init_hardware:
             ; set system RAM size for test purposes
 	    lda #0
 	    sta _ramsize
-	    lda #2
+	    lda #1
 	    sta _ramsize+1
 	    lda #192
 	    sta _procmem
@@ -215,7 +215,7 @@ map_kernel:
 ;	Entry point to map a bank (0..2) We switch 8000-FFFF
 ;
 map_bank_i:		
-		CMP #0
+		CPX #0
 		BNE @next
 		;map bank zero (base map)
 		; set cr0 to zero, VIA pa0..pa2 should already be set
@@ -223,13 +223,13 @@ map_bank_i:
 		STA CR0
 		RTS
 @next:
-		CMP #1 
+		CPX #1 
 		BNE @next1
-		lda $80 ; map page 2 and 0 (bank 1, ext mem)
+		lda #$80 ; map page 2 and 0 (bank 1, ext mem)
 		STA CR0
 		RTS
 @next1: 
-		LDA $86 ; map page 3 and 1 (bank 2, ext mem)
+		LDA #$86 ; map page 3 and 1 (bank 2, ext mem)
 		STA CR0
 		RTS
 
@@ -696,7 +696,7 @@ hd_kmap:
 	rts
 
 hd_read256:
-	lda $FE10
+	lda $FF80
 	sta (ptr3),y
 	iny
 	bne hd_read256
@@ -723,7 +723,7 @@ hd_kmapw:
 
 hd_write256:
 	lda (ptr3),y
-	sta $FE10
+	sta $FF80
 	iny
 	bne hd_write256
 	rts

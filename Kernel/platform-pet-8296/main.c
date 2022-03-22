@@ -53,29 +53,26 @@ static volatile uint8_t *via = (volatile uint8_t *)0xe840;
 
 void device_init(void)
 {
-
-#ifdef CONFIG_IDE
-	devide_init();
-#endif
-	/* FIXME: we need a way to time the CPU against something to get
-	   the VIA clock rate. For now hard code 4MHz */
+	/* FIXME: the pet kernal sets up an interrupt driven by hsync
+	   just keep it..*/
 	/* Timer 1 free running */
+	IO_PEEK_ENABLE;
 	via[11] = 0x40;
-	via[4] = 0x40;	/* 100Hz at 4MHz */
+	via[4] = 0x10;	/* 25Hz at 1MHz */
 	via[5] = 0x9C;
 	via[14] = 0x7F;	/* Clear IER */
 	via[14] = 0xC0;	/* Enable Timer 1 */
+	IO_PEEK_DISABLE;
+#ifdef CONFIG_IDE
+	devide_init();
+#endif
 }
 
 void platform_interrupt(void)
 {
-	uint8_t dummy;
-
+	// fixme check correct interrupt
 	tty_poll();
-	if (via[13] & 0x40) {
-		dummy = via[4]; /* Reset interrupt */
-		timer_interrupt();
-	}
+	timer_interrupt();
 }
 
 /* For now this and the supporting logic don't handle swap */

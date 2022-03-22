@@ -4,6 +4,8 @@
 #define IDE_IS_MMIO
 #define IDE_8BIT_ONLY
 
+#define IDE_DRIVE_COUNT 1
+
 #define IDE_REG_DATA		0xFF80
 #define IDE_REG_ERROR		0xFF81
 #define IDE_REG_FEATURES	0xFF81

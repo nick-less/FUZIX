@@ -32,7 +32,7 @@ tcflag_t termios_mask[NUM_DEV_TTY + 1] = {
 	_CSYS	/* Nothing configurable */
 };
 
-/* tty1 is the screen tty2+ are the serial ports */
+/* tty1 is the screen  */
 
 /* Output for the system console (kprintf etc) */
 void kputchar(char c)
@@ -41,6 +41,25 @@ void kputchar(char c)
 		tty_putc(1, '\r');
 	tty_putc(1, c);
 }
+
+unsigned char vt_map_petscii(unsigned char c)
+{
+
+	if ((c >= 'A') && (c<='Z')) {
+	 	return c + 32;
+	}
+	if ((c >= 'a') && (c<='z')) {
+	 	return c ;
+	}
+	if (c == 8) {
+		return 20;
+	}
+	if (c == 10) {
+		return 13;
+	}
+	return c;
+}
+
 
 ttyready_t tty_writeready(uint_fast8_t minor)
 {
@@ -75,23 +94,27 @@ void tty_data_consumed(uint_fast8_t minor)
 void tty_poll(void)
 {
         uint8_t x;
+		IO_PEEK_ENABLE;
         x = *kbd_read;
-        if (x & 0x80) {
-		tty_inproc(1, x & 0x7F);
-		x = *kbd_strobe;
-	}
+		IO_PEEK_DISABLE;
+//        if (x & 0x80) {
+//		tty_inproc(1, 0);
+//		IO_PEEK_ENABLE;
+//		x = *kbd_strobe;
+//		IO_PEEK_DISABLE;
+//	}
 }
 
-uint8_t check_timer(void)
-{
-	/* For now asume mouse card IIc - hack. Once we have proper IRQ
-	   handling in place we can key this appropriately */
-	if (*irq_check & 0x80) {
-		*irq_reset;
-		return 1;
-	}
-	return 0;
-}
+// uint8_t check_timer(void)
+// {
+// 	/* For now asume mouse card IIc - hack. Once we have proper IRQ
+// 	   handling in place we can key this appropriately */
+// 	if (*irq_check & 0x80) {
+// 		*irq_reset;
+// 		return 1;
+// 	}
+// 	return 0;
+// }
 
 // void platform_interrupt(void)
 // {

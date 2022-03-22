@@ -74,7 +74,7 @@ badswitchmsg: .byte "_switchin: FAIL"
 
 ;
 ;	On entry x,a holds the process to switch in
-;
+; TODO
 _switchin:
 	sei
 	sta	ptr1
@@ -240,7 +240,7 @@ _dofork:
 ;	the U_DATA is still not fully modified so holds the parents bank
 ;	number. This wants optimising to avoid copying all the unused
 ;	space!
-;
+;  TODO!
 fork_copy:
 	ldy #P_TAB__P_PAGE_OFFSET
 	lda (ptr1),y		; child->p_pag[0]
