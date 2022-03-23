@@ -94,9 +94,9 @@ void tty_data_consumed(uint_fast8_t minor)
 void tty_poll(void)
 {
         uint8_t x;
-		IO_PEEK_ENABLE;
-        x = *kbd_read;
-		IO_PEEK_DISABLE;
+		// IO_PEEK_ENABLE;
+        // x = *kbd_read;
+		// IO_PEEK_DISABLE;
 //        if (x & 0x80) {
 //		tty_inproc(1, 0);
 //		IO_PEEK_ENABLE;

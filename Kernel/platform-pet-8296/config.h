@@ -70,4 +70,4 @@ extern void *memmove(void *dest, const void *src, size_t n);
 #define platform_discard()
 #define platform_copyright() kprintf("cbm 8296\r")
 
-#define BOOTDEVICENAMES "hd2"
+#define BOOTDEVICENAMES "hd#"

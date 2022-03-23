@@ -101,9 +101,9 @@ init_early:
 
 init_hardware:
             ; set system RAM size for test purposes
-	    lda #0
+	    lda #$80
 	    sta _ramsize
-	    lda #1
+	    lda #0
 	    sta _ramsize+1
 	    lda #192
 	    sta _procmem
