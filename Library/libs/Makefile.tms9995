@@ -1,14 +1,14 @@
-CC = cc68
-ASM = as68
+CC = cc9995
+ASM = as9995
 AR = ar
-LINKER = ld68
-CC_OPT = -D__STDC__ -c -I../include/ -I../include/6303/
-CC_NOOPT = -D__STDC__ -c -I../include/ -I../include/6303/
+LINKER = ld9995
+CC_OPT = -D__STDC__ -c -I../include/ -I../include/tms9995/ -X
+CC_NOOPT = -D__STDC__ -c -I../include/ -I../include/tms9995/ -X
 ASM_OPT =
 LINKER_OPT =
-SRC_CRT0 = crt0_6303.s crt0nostdio_6303.s crt0_6303_rel.s crt0nostdio_6303_rel.s
+SRC_CRT0 = crt0_tms9995.s crt0nostdio_tms9995.s
 OBJ_CRT0 = $(SRC_CRT0:.s=.o)
-SRC_ASM = longjmp_6303.s setjmp_6303.s
+SRC_ASM = longjmp_tms9995.s setjmp_tms9995.s
 OBJ_ASM = $(SRC_ASM:.s=.o)
 #
 #	Library routines.
@@ -77,28 +77,28 @@ OBJ_ALL = $(OBJ_ASM) $(OBJ_C) $(OBJ_HARD) $(OBJ_TC) $(OBJ_RL) $(OBJ_CURS)
 all: syslib.lib termcap.lib curses.lib readline.lib liberror.txt \
      $(OBJ_CRT0)
 
-.PHONY: fuzix6303/Makefile
+.PHONY: fuzixtms9995/Makefile
 
-fuzix6303/Makefile: ../tools/syscall_6303.c ../../Kernel/include/syscall_name.h
-	(cd ..; make tools/syscall_6303)
-	../tools/syscall_6303
+fuzixtms9995/Makefile: ../tools/syscall_tms9995.c ../../Kernel/include/syscall_name.h
+	(cd ..; make tools/syscall_tms9995)
+	../tools/syscall_tms9995
 
-syslib.lib: fuzix6303/Makefile $(OBJ_ALL)
-	(cd fuzix6303; make)
+syslib.lib: fuzixtms9995/Makefile $(OBJ_ALL)
+	(cd fuzixtms9995; make)
 	$(AR) cr syslib.lib $(OBJ_ALL)
-	ln -sf syslib.lib libc6303.a
+	ln -sf syslib.lib libctms9995.a
 
-termcap.lib: fuzix6303/Makefile $(OBJ_TC)
+termcap.lib: fuzixtms9995/Makefile $(OBJ_TC)
 	$(AR) cr termcap.lib $(OBJ_TC)
-	ln -sf termcap.lib libtermcap6303.a
+	ln -sf termcap.lib libtermcaptms9995.a
 
-readline.lib: fuzix6303/Makefile $(OBJ_RL)
+readline.lib: fuzixtms9995/Makefile $(OBJ_RL)
 	$(AR) cr readline.lib $(OBJ_RL)
-	ln -sf readline.lib libreadline6303.a
+	ln -sf readline.lib libreadlinetms9995.a
 
-curses.lib: fuzix6303/Makefile $(OBJ_CURS)
+curses.lib: fuzixtms9995/Makefile $(OBJ_CURS)
 	$(AR) cr curses.lib $(OBJ_CURS)
-	ln -sf curses.lib libcurses6303.a
+	ln -sf curses.lib libcursestms9995.a
 
 liberror.txt:
 	../tools/liberror -X > liberror.txt
@@ -127,7 +127,7 @@ $(OBJ_HARD):%.o: %.c
 clean:
 	rm -rf *.o *.lib *~ syscall.l  libc.l syslib.l liberror.txt *.a
 	(cd curses; rm -rf *.rel *.asm *.sym *.lst *~ *.o)
-	(cd fuzix6303; make clean)
+	(cd fuzixtms9995; make clean)
 
-# Blank for now until we sort stuff out properly for 6303
+# Blank for now until we sort stuff out properly for tms9995
 install:
