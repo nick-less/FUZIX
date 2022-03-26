@@ -6,9 +6,10 @@
 #include <device.h>
 #include <vt.h>
 #include <tty.h>
+#include "config.h"
 
-#define kbd_read ((volatile uint8_t *)0xE810)
-#define kbd_strobe ((volatile uint8_t *)0xE812)
+#define kbd_read ((volatile uint8_t *)0xE812)
+#define kbd_strobe ((volatile uint8_t *)0xE810)
 #define irq_check ((volatile uint8_t *)0xE840)
 #define irq_reset ((volatile uint8_t *)0xE840)
 
@@ -90,19 +91,124 @@ int tty_carrier(uint_fast8_t minor)
 void tty_data_consumed(uint_fast8_t minor)
 {
 }
-/* Beware - this kbd access also disables 80store */
+
+static uint8_t kbd_timer;
+uint8_t keyboard[11][8];
+uint8_t shiftkeyboard[11][8];
+uint8_t keymap[11];
+struct vt_repeat keyrepeat;
+uint8_t vtattr_cap;
+
+static uint8_t keyin[11];
+static uint8_t keybyte, keybit;
+static uint8_t newkey;
+static int keysdown = 0;
+static uint8_t shiftmask[11] = {
+	0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0
+};
+
+static void keyproc(void)
+{
+	int i;
+	uint8_t key;
+
+	for (i = 0; i < 11; i++) {
+		key = keyin[i] ^ keymap[i];
+		if (key) {
+			int n;
+			int m = 1;
+			for (n = 0; n < 8; n++) {
+				if ((key & m) && (keymap[i] & m)) {
+					if (!(shiftmask[i] & m))
+						keysdown--;
+				}
+				if ((key & m) && !(keymap[i] & m)) {
+					if (!(shiftmask[i] & m)) {
+						keysdown++;
+						newkey = 1;
+						keybyte = i;
+						keybit = n;
+					}
+				}
+				m += m;
+			}
+		}
+		keymap[i] = keyin[i];
+	}
+}
+
+static uint8_t capslock = 0;
+
+static void keydecode(void)
+{
+	uint8_t c;
+
+	if (keybyte == 6 && keybit == 3) {
+		capslock = 1 - capslock;
+		return;
+	}
+
+	if (keymap[6] & 3 ) {	/* shift or control */
+		c = shiftkeyboard[keybyte][keybit];
+		/* VT switcher */
+#if 0		
+		if (c == KEY_F1 || c == KEY_F2 || c == KEY_F3 || c == KEY_F4) {
+			if (inputtty != c - KEY_F1) {
+				inputtty = c - KEY_F1;
+				vtexchange();	/* Exchange the video and backing buffer */
+			}
+			return;
+		}
+#endif			
+	} else
+		c = keyboard[keybyte][keybit];
+
+	if (keymap[6] & 2) {	/* control */
+		if (c > 31 && c < 127)
+			c &= 31;
+	}
+
+	if (capslock && c >= 'a' && c <= 'z')
+		c -= 'a' - 'A';
+
+	/* TODO: function keys (F1-F10), graph, code */
+
+	vt_inproc(/*inputtty +*/1, c);
+}
+
+
+void update_keyboard(void)
+{
+	int n;
+	uint8_t r,t;
+	/*
+	IO_PEEK_ENABLE;
+    t= *kbd_read;
+	// encode keyboard row in bits 0-3 pia1 port a, then read status from pia1 port b
+	for (n =0; n < 11; n++) {
+		r = (t & 0xf0) | n;
+		*kbd_strobe = r;
+		keyin[n] = ~*kbd_read;
+	}
+	IO_PEEK_DISABLE;
+	*/
+}
+
 void tty_poll(void)
 {
         uint8_t x;
-		// IO_PEEK_ENABLE;
-        // x = *kbd_read;
-		// IO_PEEK_DISABLE;
-//        if (x & 0x80) {
-//		tty_inproc(1, 0);
-//		IO_PEEK_ENABLE;
-//		x = *kbd_strobe;
-//		IO_PEEK_DISABLE;
-//	}
+
+	keyproc();
+
+	if (keysdown && keysdown < 3) {
+		if (newkey) {
+			keydecode();
+			kbd_timer = keyrepeat.first * ticks_per_dsecond;
+		} else if (! --kbd_timer) {
+			keydecode();
+			kbd_timer = keyrepeat.continual * ticks_per_dsecond;
+		}
+	}	
 }
 
 // uint8_t check_timer(void)
