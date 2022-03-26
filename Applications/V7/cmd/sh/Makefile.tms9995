@@ -1,4 +1,4 @@
-include $(FUZIX_ROOT)/Applications/rules.6303
+include $(FUZIX_ROOT)/Applications/rules.tms9995
 
 .SUFFIXES: .c .o
 
@@ -17,7 +17,7 @@ sh: $(OBJS)
 	$(LINKER) -o $@ $(CRT0) $^  $(LINKER_LIB) 
 
 fsh: $(FOBJS)
-	$(LINKER) -o $@ $(CRT0) $^ -lreadline6303 $(LINKER_LIB) 
+	$(LINKER) -o $@ $(CRT0) $^ -lreadlinetms9995 $(LINKER_LIB) 
 
 $(OBJS): $(INCS)
 
