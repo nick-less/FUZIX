@@ -5,13 +5,13 @@
 static volatile uint8_t *cpuio = (volatile uint8_t *)0;
 
 /*
- * Map handling: allocate 4 banks per process
+ * Map handling: allocate 3 banks per process
  */
 
 void pagemap_init(void)
 {
-    uint8_t i;
-    for (i = 36; i <= 63; i++)
+    uint_fast8_t i;
+    for (i = 36; i < 63; i+= 3)
         pagemap_add(i);
 }
 
@@ -39,6 +39,5 @@ void device_init(void)
 #ifdef CONFIG_IDE
 	devide_init();
 #endif
-	/* We will just use the TOF event */
-	cpuio[0x08] = 0x04;
+	/* TODO timer */
 }
