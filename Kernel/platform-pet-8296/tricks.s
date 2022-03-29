@@ -1,9 +1,9 @@
 ;
 ;	6502 version
 ;
-        .export _platform_switchout
-        .export _switchin
-        .export _dofork
+	.export _platform_switchout
+	.export _switchin
+	.export _dofork
 	.export _ramtop
 	.export _create_init_common
 
@@ -26,11 +26,11 @@
 	.import pushax
 	.import incsp2
 
-        .include "kernel.def"
-        .include "../kernel02.def"
+	.include "kernel.def"
+	.include "../kernel02.def"
 	.include "zeropage.inc"
 
-        .segment "COMMONMEM"
+	.segment "COMMONMEM"
 
 ; ramtop must be in common for single process swapping cases
 ; and its a constant for the others from before init forks so it'll be fine
@@ -62,12 +62,12 @@ _platform_switchout:
 	lda #0
 	sta _inint
 
-        ; find another process to run (may select this one again) returns it
-        ; in x,a
-        jsr _getproc
-        jsr _switchin
-        ; we should never get here
-        jsr _platform_monitor
+	; find another process to run (may select this one again) returns it
+	; in x,a
+	jsr _getproc
+	jsr _switchin
+	; we should never get here
+	jsr _platform_monitor
 
 badswitchmsg: .byte "_switchin: FAIL"
 	.byte 13, 10, 0
@@ -83,19 +83,24 @@ _switchin:
 	; with a CPU that hasn't got sufficient registers to keep it on
 	; CPU
 	sta	switch_proc_ptr
-	stx	switch_proc_ptr+1
+	STX	switch_proc_ptr+1
+
+    LDA #5
+	sta $fff1
+
+
 ;	jsr	outxa
 	ldy	#P_TAB__P_PAGE_OFFSET
 	lda	(ptr1),y
 ;	jsr	outcharhex
-	sta	$FE78		; switches zero page, stack memory area
+;	sta	$FE78		; switches zero page, stack memory area
 	; ------- No valid stack, new ZP ----- stack must not be used
 
 	; Set ptr1 back up (the old ptr1 was on the other ZP)
-	lda	switch_proc_ptr
-	sta	ptr1
-	lda	switch_proc_ptr+1
-	sta	ptr1+1
+;	lda	switch_proc_ptr
+;	sta	ptr1
+;	lda	switch_proc_ptr+1
+;	sta	ptr1+1
 
         ; check u_data->u_ptab matches what we wanted
 	lda	_udata + U_DATA__U_PTAB
@@ -124,8 +129,8 @@ _switchin:
 	sta sp+1
 	pla
 	sta sp
-	lda _inint
-        beq swtchdone		; in ISR, leave interrupts off
+	LDA _inint
+	beq swtchdone		; in ISR, leave interrupts off
 	cli
 swtchdone:
 	pla		; Return code
@@ -242,6 +247,7 @@ _dofork:
 ;	space!
 ;  TODO!
 fork_copy:
+jmp fork_copy ; FIXME
 	ldy #P_TAB__P_PAGE_OFFSET
 	lda (ptr1),y		; child->p_pag[0]
 	sta $FE7A		; 8000

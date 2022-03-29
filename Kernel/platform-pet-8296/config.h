@@ -8,20 +8,24 @@
 #undef CONFIG_ACCT
 /* Multiple processes in memory at once */
 #define CONFIG_MULTI
-/* Use fixed banks for now. It's simplest and we've got so much memory ! */
-#define CONFIG_BANKS	1
+
+#define DEBUG 1
+
+#define CONFIG_BANK_FIXED 1
+#define CONFIG_BANKS	2  // 2x32k
+
 /* Permit large I/O requests to bypass cache and go direct to userspace */
 #define CONFIG_LARGE_IO_DIRECT(x)	1
 
 #define CONFIG_CALL_R2L		/* Runtime stacks arguments backwards */
 
 /*
- *	128 RAM (swap yet to do )
+ *	128k RAM (swap yet to do )
  *  common is bottom on this platform
  */
-#define CONFIG_BANK_FIXED
-#define MAX_MAPS 	3   /* 2 x 32K */
+#define MAX_MAPS 	2   /* 2 x 32K */
 #define MAP_SIZE    0x8000
+#define SWAPDEV hd0
 
 #define TICKSPERSEC 60	    /* Ticks per second */
 
@@ -68,6 +72,6 @@ extern void *memmove(void *dest, const void *src, size_t n);
 #define VT_MAP_CHAR(x)  vt_map_petscii(x)
 
 #define platform_discard()
-#define platform_copyright() kprintf("cbm 8296\r")
+#define platform_copyright() kputs("cbm 8296\r")
 
 #define BOOTDEVICENAMES "hd#"

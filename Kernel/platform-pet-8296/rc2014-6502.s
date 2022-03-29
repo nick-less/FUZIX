@@ -54,7 +54,9 @@
             .include "kernel.def"
             .include "../kernel02.def"
 	    .include "zeropage.inc"
-
+CR0		  = $FFF0
+VIA		  = $E840
+IDE		  = $FF80
 ; -----------------------------------------------------------------------------
 ; COMMON MEMORY BANK (0x0200 upwards after the common data blocks)
 ; -----------------------------------------------------------------------------
@@ -62,6 +64,8 @@
 
 _platform_monitor:
 _platform_reboot:
+		lda #$FF
+		STA VIA+1
 	    lda #0
 	    sta $FFF0		; disable exp ram, enable roms
 	    jmp ($FFFC)
@@ -498,7 +502,7 @@ copy_args:
 	    dey
 	    lda (ptr1),y
 	    sta _udata+U_DATA__U_ARGN,x
-            inx
+        inx
 	    inx
 	    cpy #0
 	    bne copy_args
@@ -637,7 +641,7 @@ platform_doexec:
 	    lda _udata+U_DATA__U_ISP
 	    sta sp
 	    ldx _udata+U_DATA__U_ISP+1
-            stx sp+1
+        stx sp+1
 
 ;
 ;	Set up the 6502 stack
@@ -696,7 +700,7 @@ hd_kmap:
 	rts
 
 hd_read256:
-	lda $FF80
+	lda IDE
 	sta (ptr3),y
 	iny
 	bne hd_read256
@@ -723,7 +727,7 @@ hd_kmapw:
 
 hd_write256:
 	lda (ptr3),y
-	sta $FF80
+	sta IDE
 	iny
 	bne hd_write256
 	rts

@@ -14,16 +14,16 @@ The memory map is than
 0x9000 - 0xffdf ram
 0xff80 - 0xff8f ide
 0xfff0 - 0xfff0 expansion register
-0xfff1 - 0xffff ram
+0xfff1 - 0xffff ram  (vectos)
 
 VIA Port A
 ; BIT 
-; 0 - RAM_SELA
-; 1 - RAM_SEL9
-; 2 - RAM_ON
+; 0 - RAM_SELA  - enables base ram at 0xa000
+; 1 - RAM_SEL9 -  enables base ram at 0x9000
+; 2 - RAM_ON - enables base ram in place of system roms
 
 
-0xfff - CR0: this is a special register, its write only 
+0xfff - CR0: this is the memory extension register, its write only 
 ;  BIT 
 ;  0 - 1 = WriteProtect $8000 - $BFFF
 ;  1 - 1 = WriteProtect $C000 - $FFFF
@@ -31,19 +31,19 @@ VIA Port A
 ;          1 0:  3 and 0,  1 1:  3 and 1
 ;  4 - 1 = reserved
 ;  5 - 1 = Screen peek $8000-$8FFF 
-;  6 - 1 = I/O peek $E800-$EFFF  
-;  7 - 1 = enable memory expansion
+;  6 - 1 = I/O peek $E800-$E9FF  
+;  7 - 1 = enable memory expansion (i.e. the top 32k are replaced by expansion memory, see bits 2+3)
 ;
 
-the 8296 only supports IEEE Drives, luckily I have build an IDE Adapter
+the 8296 only supports IEEE Drives, luckily I have build an IDE Adapter which I will use for the first tries
 
 
 Interrupts deal wth the shared ZP by swapping the ZP back and forth with the
 interrupt copies (about 20 bytes involved)
 
 
-IO:  only mapped when accessed (how?)
-    8000-9FFF       Screen Memory (for pages)
+IO:  only mapped when accessed by enabling IO peek or screen peek
+    8000-8FFF   Screen Memory (for pages)
     E810-E81F		6520 PIA1
     E820-E83F		6520 PIA2
     E840-E87F		6522 VIA
