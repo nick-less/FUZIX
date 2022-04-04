@@ -1,7 +1,12 @@
 ;
-;	TMS9995 version
+;	TMS9995 version for the Geneve
 ;
-;	Just to get us going
+;	This is a lot less hairy than many platforms because we have some
+;	stable memory at all times and lots of registers.
+;
+;	Sadly we dont have enough fast scratch to keep a workpad per process
+;
+;	TODO: all the fun stuff like swap and swap stacks
 ;
         .export _platform_switchout
         .export _switchin
@@ -44,7 +49,7 @@ _platform_switchout:
 	mov	r9,*r13
 	dect	r13
 	mov	r10,*r13
-	; Save the FP and oddities
+	; TODO Save the FP and oddities ?
 	dect	r13
 	mov	r12,*r13
 	dect	r13
@@ -52,10 +57,6 @@ _platform_switchout:
 	dect	r13
 	mov	r15,*r13
 	mov	r13,@_udata + U_DATA__U_SP	; Save old SP
-
-	bl	@map_process_always
-	bl	@stash_udata
-	bl	@map_kernel
 
         ; set inint to false
 	clr	@_inint
@@ -67,16 +68,6 @@ _platform_switchout:
         bl	@_switchin
         ; we should never get here
         bl	@_platform_monitor
-
-stash_udata:
-	li	r0,_udata
-	li	r1, 0xBE00		; Ick FIXME hardcoded
-	li	r2, 256		; 256 words of udata
-stash_loop:
-	mov	*r0+,*r1+
-	dec	r2
-	jne	@stash_loop
-	rt
 
 badswitchmsg:
 	.ascii "_switchin: FAIL"
@@ -91,41 +82,22 @@ _switchin:
 	limi	IRQ_OFF
 	dect	r13
 	mov	r11,*r13
-
 	mov	r4,r8
 
-	mov	@P_TAB__P_PAGE_OFFSET(r8),r0
-	c	@_udata+U_DATA__U_PAGE,r0
-	jeq	@nostash
 
-	ci	r0,0
+	mov	@P_TAB__P_PAGE_OFFSET(r8),r0
 	jne	@not_swapped
+
 	bl	@_swapper
 
 	mov	@P_TAB__P_PAGE_OFFSET(r8),r0
 
 not_swapped:
-	bl	@map_process_x
-
-	; We must do this inline as we will be changing stack under
-	; ourselves and without stack
-	li	r0,0xBE00
-	li	r1,_udata
-	li	r2,256		; 256 words
-
-unstash_loop:
-	mov	*r0+,*r1+
-	dec	r2
-	jne	@unstash_loop
-
-	; Now get the stack back sane
-	mov	@_udata + U_DATA__U_SP,r13
-	bl	@map_kernel
-nostash:
         ; check u_data->u_ptab matches what we wanted
 	; r8 still holds the proc pointer
 	c	@_udata + U_DATA__U_PTAB,r8
 	jne	@switchinfail
+
 
 	; Load into the byte side
 	li	r0, P_RUNNING * 256
@@ -136,6 +108,14 @@ nostash:
 	mov 	@P_TAB__P_PAGE_OFFSET+2(r8),@_udata + U_DATA__U_PAGE+2
 
 	clr	@_runticks
+
+	; Now do the big switch
+	mov	@P_TAB__P_PAGE_OFFSET(r8),r1
+	movb	@7(r1),r0
+
+	;	Stack and everything just flipped under us
+	;	Don't touch the stack until we reload it below
+	movb	r0,@0xF117
 
         ; restore machine state -- note we may be returning from either
         ; _switchout or _dofork
@@ -177,7 +157,7 @@ _dofork:
 	dect	r13		; PID for return code
 	mov	@P_TAB__P_PID_OFFSET(r3),*r13
 
-	; Save the registers we need (r0-r7 are saved elsewhere when
+	; Save the registers we need (r0-r5 are saved elsewhere when
 	; relevant) but for C calling the func expects them to be lost
 	; anyway. Must match switchout.
 	dect	r13
@@ -190,7 +170,7 @@ _dofork:
 	mov	r9,*r13
 	dect	r13
 	mov	r10,*r13
-	; Save the FP and oddities
+	; FIXME: Save the FP and oddities
 	dect	r13
 	mov	r12,*r13
 	dect	r13
@@ -211,18 +191,17 @@ _dofork:
 	;	On entry r15 is the process pointer and r3 is scratch but
 	;	still holds the same
 	;
-	ai	r3, P_TAB__P_PAGE_OFFSET
+	mov	@P_TAB__P_PAGE_OFFSET(r15),r3
 	li	r4, _udata+U_DATA__U_PAGE
-	li	r5, 3
+	li	r5, 8
 
 copyblock:
-	movb	*r3+,@0xFE79	; Map at 16K (dest)
-	movb	*r4+,@0xFE7A	; Map at 32K (source)
+	movb	*r3+,@0xF112	; Map at 0x4000
+	movb	*r4+,@0xF113	; Map at 0x6000
 
 	li	r0, 0x4000
-	li	r1, 0x8000
-	mov	r0, r2		; 16K count too
-
+	li	r1, 0x6000
+	li	r2, 0x2000	; 8K count
 copy:
 	mov	*r1+,*r0+
 	dect	r2
@@ -231,17 +210,11 @@ copy:
 	dec	r5
 	jne	@copyblock
 
-	mov	@_udata+U_DATA__U_PTAB,r0
-	bl	@map_process_x
-	bl	@stash_udata
-	bl	@map_kernel_di
-
 	li	r5,_udata
 	mov	r15,r4
 	bl	@_makeproc
 
 	; any calls to map process will now map the childs memory
-
 	ai	r13, 22			; remove stack frame (11 words)
         ; runticks = 0;
 	clr	r1

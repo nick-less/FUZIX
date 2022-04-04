@@ -1,5 +1,5 @@
 ;
-;	We keep our common area up high
+;	We keep our common area right up high
 ;
 ;
         ; exported symbols

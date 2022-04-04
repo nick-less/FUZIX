@@ -1,4 +1,3 @@
-
 /*
  * This file lifted in toto from 'Dlibs' on the atari ST  (RdeBath)
  *
@@ -8,15 +7,17 @@
  *    dal@syntel.UUCP                         United States of America
  *  "It's not reality that's important, but how you perceive things."
  */
-#include <stdio.h>
+#include <stdlib.h>
 
 static int _bsearch;		/* index of element found, or where to
 				 * insert */
 
-char *bsearch(char *key, char *base, int num, int size,
-	      int (*cmp) (char *, char *))
+void *bsearch(void *_key, void *_base, size_t num, size_t size,
+	      cmp_func_t cmp)
 {
 	int a, b, c, dir;
+	char *key = _key;
+	char *base = _base;
 
 	a = 0;
 	b = num - 1;
