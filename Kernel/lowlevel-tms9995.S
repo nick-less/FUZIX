@@ -108,11 +108,11 @@ stack_workspace:
 	ai	r1,	-36
 	mov	r1, @26(r13)
 save_next:
-	mov	*r13+, *r3+
+	mov	*r13+, *r1+
 	dec	r0
 	jne	@save_next
-	mov	r14, *r3+
-	mov	r15, *r3+
+	mov	r14, *r1+
+	mov	r15, *r1+
 	rt
 ;
 ;	Return to a stacked workspace
@@ -121,11 +121,11 @@ pop_workspace:
 	li	r0,	16
 	mov	@26(r13), r1
 pop_next:
-	mov	*r3+, *r2+
+	mov	*r1+, *r2+
 	dec	r0
 	jne	@pop_next
-	mov	*r3+, r15
-	mov	*r3+, r14
+	mov	*r1+, r15
+	mov	*r1+, r14
 	mov	r1, @26(r13)
 	rtwp
 
@@ -232,6 +232,27 @@ _doexec:
 	bl	@map_process_always
 	mov	@_udata+U_DATA__U_ISP, r13
 	clr	@_udata+U_DATA__U_INSYS
+	;	Write r4 into the user workspace
+	mov	r4,@user_ws+8
+	mov	r13,@user_ws+26
+	lwpi	user_ws
+	clr	r0
+	clr	r1
+	clr	r2
+	clr	r3
+	clr	r5
+	clr	r6
+	clr	r7
+	clr	r8
+	clr	r9
+	clr	r10
+	clr	r11
+	clr	r12
+	clr	r14
+	; Hack for now
+	li	r14,0x0100	; FIXME program base
+	clr	r15
+	limi	IRQ_ON
 	b	*r4
 
 trap_handler:
