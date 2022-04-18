@@ -6,22 +6,23 @@
 	.export __uget
 	.export __uput
 
+	.setcpu	6800
 	.common
 
 __uputc:
 	tsx
-	ldab 4,x
-	ldx 3,x
+	ldab 5,x
+	ldx 2,x
 	jsr map_process_always
 	stab 0,x
 	jsr map_kernel
 	jmp ret4
 
 __uputw:
+	ldaa 4,x
 	tsx
-	ldaa 5,x
-	ldab 6,x
-	ldx 3,x
+	ldab 5,x
+	ldx 2,x
 	jsr map_process_always
 	staa 0,x
 	stab 1,x
@@ -30,7 +31,7 @@ __uputw:
 
 __ugetc:
 	tsx
-	ldx 3,x
+	ldx 2,x
 	jsr map_process_always
 	ldab 0,x
 	clra
@@ -39,43 +40,57 @@ __ugetc:
 
 __ugetw:
 	tsx
-	ldx 3,x
+	ldx 2,x
 	jsr map_process_always
-	ldab 0,x
-	ldaa 1,x
+	ldaa 0,x
+	ldab 1,x
 	jsr map_kernel
 	jmp ret2
 
 __uzero:
 	tsx
-	ldaa 3,x
-	ldab 4,x
-	ldx 5,x
+	ldaa 2,x
+	ldab 3,x
+	ldx 4,x
 	jsr map_process_always
 	; Optimize, unroll etc ?
+	pshb
+uzeropg:
+	tsta
+	beq	endwipe
+	clrb
+	bsr	uzerolp
+	deca
+	bra	uzeropg
+endwipe:
+	pulb
+	tstb
+	beq	enduz
+	bsr	uzerolp
+enduz:
+	jsr map_kernel
+	jmp ret4
+
+	
 uzerolp:
 	clr 0,x
 	inx
-	subb #1
-	sbca #0
+	decb
 	bne uzerolp
-	jsr map_kernel
-	jmp ret4
+	rts
 
 __uget:
 	; This one is harder as we've got to juggle two pointers
 	; We can optimize this a lot by abusing the stack etc but
 	; start simple. Take care as tmp/to/from are kernel mapped
 	tsx
-	ldaa 3,x	; len
-	ldab 4,x
-	staa @tmp
-	stab @tmp
-	ldaa 5,x	; to
-	ldab 6,x
-	staa @to
-	stab @to+1
-	ldx 7,x		; from
+	ldx 2,x
+	stx @tmp
+	tsx
+	ldx 4,x	; to
+	stx @to
+	tsx
+	ldx 6,x		; from
 	stx @from
 ugetl:
 	ldx @from
@@ -88,12 +103,10 @@ ugetl:
 	stab ,x
 	inx
 	stx @to
-	ldab @tmp
-	ldaa @tmp+1
-	subb #1
-	sbca #0
-	staa @tmp
-	stab @tmp+1
+	ldx @tmp
+	dex
+	stx @tmp
+	; On 6800 only Z bit is affected by DEX, but that will do us fine
 	bne ugetl
 	clrb
 	clra
@@ -104,15 +117,13 @@ __uput:
 	; We can optimize this a lot by abusing the stack etc but
 	; start simple. Take care as tmp/to/from are kernel mapped
 	tsx
-	ldaa 3,x	; len
-	ldab 4,x
-	staa @tmp
-	stab @tmp+1
-	ldaa 5,x	; to
-	ldab 6,x
-	staa @to
-	stab @to+1
-	ldx 7,x		; from
+	ldx 2,x
+	stx @tmp
+	tsx
+	ldx 4,x
+	stx @to
+	tsx
+	ldx 6,x		; from
 	stx @from
 uputl:
 	ldx @from
@@ -125,12 +136,9 @@ uputl:
 	jsr map_kernel
 	inx
 	stx @to
-	ldaa @tmp
-	ldab @tmp+1
-	subb #1
-	sbca #0
-	staa @tmp
-	stab @tmp+1
+	ldx @tmp
+	dex
+	stx @tmp
 	bne uputl
 	clrb
 	clra
