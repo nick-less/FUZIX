@@ -126,7 +126,6 @@ From UZI by Doug Braun and UZI280 by Stefan Nitschke.
 #define NSIGS	  32      /* Number of signals <= 32 */
 #define ROOTINODE 1       /* Inode # of / for all mounted filesystems. */
 #define CMAGIC    24721   /* Random number for cinode c_magic */
-#define SMOUNTED  12742   /* Magic number to specify mounted filesystem */
 
 #define OS_BANK 0
 #define NO_DEVICE (0xFFFFU)
@@ -169,13 +168,11 @@ typedef uint32_t uoff_t;	/* Internal use so we can keep the compiler happy */
 typedef uint16_t blkno_t;    /* Can have 65536 512-byte blocks in filesystem */
 #define NULLBLK ((blkno_t)-1)
 
-#define BLKSIZE		512
-#define BLKSHIFT	9
-#define BLKMASK		511
-#define BLKOVERSIZE32	0xFE	/* Bits 25+ mean we exceeded the file size */
+#ifndef BLKSIZE
+#include "blk512.h"
+#endif
 
-/* Help the 8bit compilers out by preventing any 32bit promotions */
-#define BLKOFF(x)	(((uint16_t)(x)) & BLKMASK)
+#define BLKOVERSIZE32	0xFE	/* Bits 25+ mean we exceeded the file size */
 
 /* State of the block. We have some free bits here if we need them */
 #define BF_FREE		0
@@ -617,7 +614,7 @@ struct s_argblk {
     int a_argc;
     int a_arglen;
     int a_envc;
-    uint8_t a_buf[512-3*sizeof(int)];
+    uint8_t a_buf[BLKSIZE-3*sizeof(int)];
 };
 
 /* Time is passed as 2 x 32bit values for cleanness and portability */
@@ -874,7 +871,6 @@ extern bool validdev(uint16_t dev);
 #define uget(a,b,c)	(memcpy(b,a,c) && 0)
 #define uput(a,b,c)	(memcpy(b,a,c) && 0)
 #define ugetc(a)	(*(uint8_t *)(a))
-#define _ugetc(a)	(*(uint8_t *)(a))
 #define ugetw(a)	(*(uint16_t *)(a))
 #define ugetl(a)	(*(uint32_t *)(a))
 #define uputc(v, p)	((*(uint8_t*)(p) = (v)) && 0)
@@ -905,6 +901,8 @@ extern int _uzero(uint8_t *user, usize_t count);
 #define _uputc(v, p) ((*(uint8_t*)(p) = (v)), 0)
 #define _uputw(v, p) ((*(uint16_t*)(p) = (v)), 0)
 #define _uputl(v, p) ((*(uint32_t*)(p) = (v)), 0)
+#define _uget(a,b,c) (memcpy(b,a,c) && 0)
+#define _uput(a,b,c) (memcpy(b,a,c) && 0)
 #else
 extern int16_t _ugetc(const uint8_t *user) __fastcall;
 extern uint16_t _ugetw(const uint16_t *user) __fastcall;
@@ -986,6 +984,7 @@ extern int_fast8_t uf_alloc_n(uint_fast8_t n);
 #define i_ref(ino) ((ino)->c_refs++, (ino))
 //extern void i_ref(inoptr ino);
 extern void i_deref(inoptr ino);
+extern void corrupt_fs(uint16_t devno);
 extern void wr_inode(inoptr ino);
 extern bool isdevice(inoptr ino);
 extern int f_trunc(inoptr ino);
@@ -1143,6 +1142,13 @@ extern uint8_t write_core_image(void);
 extern void coredump_memory(inoptr ino, uaddr_t base, usize_t len, uint16_t flags);
 /* Provided by the memory manager */
 extern void coredump_image(inoptr ino);
+
+/* Filesystem block support */
+
+extern blkno_t inode_blocks(inoptr i);
+extern uint_fast8_t breadi(uint16_t dev, uint16_t ino, void *ptr);
+extern uint_fast8_t bwritei(inoptr ino);
+extern blkno_t bmap(inoptr ip, blkno_t bn, unsigned int rwflg);
 
 /* Platform interfaces */
 
