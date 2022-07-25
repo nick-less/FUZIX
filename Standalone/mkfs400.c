@@ -12,55 +12,55 @@ UZI (Unix Z80 Implementation) Utilities:  mkfs.c
 #include <sys/stat.h>
 #include <time.h>
 #include <fcntl.h>
-#define BLKSIZE 512
+
+#define BLKSIZE 400
 #include "fuzix_fs.h"
 #include "util.h"
 
 /* This makes a filesystem 
  *
  * example use:
- *   ./mkfs ./blankfs.img 64 4096
- * (this will write a 2MB filesystem with 64 blocks of inodes to ./blankfs.img)
+ *   ./mkfs400 ./blankfs.img 64 4096
  *
- * */
+ */
 
-char zero512[512];
+char zerobuf[BLKSIZE];
 
-direct dirbuf[64] = {
-        { ROOTINODE, "." },
-        { ROOTINODE, ".."}
+direct dirbuf[10] = {
+        { ROOTINODE, ".",  },
+        { ROOTINODE, "..", }
 };
 
-struct dinode inode[8];
+struct dinode inode[IPERBLK];
 
 void mkfs(uint16_t fsize, uint16_t isize, uint8_t shift);
 void dwrite(uint16_t blk, char *addr);
 
 union disk {
 	struct filesys fs;
-	uint8_t zero[512];
+	uint8_t zero[BLKSIZE];
 } fs_super;
 
 static void usage(void)
 {
-	printf("Usage: mkfs [-X] [-b blocksize] device isize fsize\n");
+	printf("Usage: mkfs400 [-X] [-b blocksize] device isize fsize\n");
 	exit(1);
 }
 
 static uint8_t validate(uint16_t bsize)
 {
 	switch(bsize) {
-	case 512:
+	case 400:
 		return 0;
-	case 1024:
+	case 800:
 		return 1;
-	case 2048:
+	case 1600:
 		return 2;
-	case 4096:
+	case 3200:
 		return 3;
-	case 8192:
+	case 6400:
 		return 4;
-	case 16384:
+	case 12800:
 		return 5;
 	default:
 		fprintf(stderr, "mkfs: unsupported block size.\n");
@@ -70,7 +70,7 @@ static uint8_t validate(uint16_t bsize)
 
 int main(int argc, char **argv)
 {
-	uint16_t fsize, isize, bsize = 512, shift = 0;
+	uint16_t fsize, isize, bsize = BLKSIZE, shift = 0;
 	uint16_t j;
 	uint32_t s;
 	int opt;
@@ -92,7 +92,7 @@ int main(int argc, char **argv)
 	if (argc - optind != 3)
 		usage();
 
-	if (sizeof(inode) != 512) {
+	if (sizeof(inode) != 384) {
 		printf("inode is the wrong size -- %d\n",
 		       (int) sizeof(inode));
 	}
@@ -104,8 +104,6 @@ int main(int argc, char **argv)
 		printf("Bad parameter values\n");
 		return -1;
 	}
-
-	memset(zero512, 0, 512);
 
 	printf("Making %d byte/block filesystem with %s byte order on device %s with fsize = %u and isize = %u.\n",
 	       bsize, swizzling==0 ? "normal" : "reversed", argv[optind], fsize, isize);
@@ -119,7 +117,7 @@ int main(int argc, char **argv)
 
 	/* Zero out the blocks */
 	for (j = 0; j < s; ++j)
-		dwrite(j, zero512);
+		dwrite(j, zerobuf);
 
 	/* Initialize the super-block */
 
@@ -130,7 +128,7 @@ int main(int argc, char **argv)
 	fs_super.fs.s_free[0] = 0;
 	fs_super.fs.s_tfree = 0;
 	fs_super.fs.s_ninode = 0;
-	fs_super.fs.s_tinode = swizzle16(8 * (isize - 2) - 2);
+	fs_super.fs.s_tinode = swizzle16(IPERBLK * (isize - 2) - 2);
 	fs_super.fs.s_shift = shift;
 	fs_super.fs.s_time = swizzle32(t);
 	fs_super.fs.s_timeh = t >> 32;
@@ -161,7 +159,7 @@ int main(int argc, char **argv)
 	/* create the root dir */
 	inode[ROOTINODE].i_mode = swizzle16(F_DIR | (0777 & MODE_MASK));
 	inode[ROOTINODE].i_nlink = swizzle16(3);
-	inode[ROOTINODE].i_size = swizzle32(64);
+	inode[ROOTINODE].i_size = swizzle32(80);	/* Two directory entries */
 	inode[ROOTINODE].i_addr[0] = swizzle16(isize);
 
 	/* Reserve reserved inode */
@@ -181,8 +179,8 @@ int main(int argc, char **argv)
 
 void dwrite(uint16_t blk, char *addr)
 {
-	lseek(dev_fd, ((int) blk) * 512, SEEK_SET);
-	if (write(dev_fd, addr, 512) != 512) {
+	lseek(dev_fd, ((int) blk) * BLKSIZE, SEEK_SET);
+	if (write(dev_fd, addr, BLKSIZE) != BLKSIZE) {
 		perror("write");
 		exit(1);
 	}
