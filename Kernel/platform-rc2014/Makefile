@@ -7,6 +7,7 @@ DISCARD_DSRCS += ../dev/devsd_discard.c
 DSRCS = ../dev/devfd.c ../dev/devide.c ../dev/mbr.c ../dev/blkdev.c
 DSRCS +=  ../dev/ds1302.c ../dev/ppide_rbc.c ../dev/devsd.c
 DSRCS += ../dev/ps2kbd.c ../dev/ps2mouse.c ../dev/amd9511.c
+DSRCS += ../dev/ds12885.c ../dev/ds12885_z80.c
 DASRCS = ../dev/devfd_hw-banked.s ../dev/ds1302_rc2014.s
 DASRCS += ../dev/z80dma.s ../dev/z80softsd.s ../dev/z80softspi.s
 DASRCS += ../dev/ps2bitbang-rc2014-kbd.s ../dev/ps2bitbang-rc2014-mouse.s
