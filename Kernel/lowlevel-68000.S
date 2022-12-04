@@ -537,11 +537,15 @@ doinstall:
 		;	this range.
 		;
 init_trap_loop:
+#if CPU>68040
 		cmp.w #$f0,a0
-		blt sandwich			; with mayo
+		blt.s sandwich			; with mayo
 		cmp.w #$fc,a0
-		ble skipvec
+		bgt.s skipvec
+		addq #4,a0
+		bra.s skipvec
 sandwich:
+#endif
 		move.l d1,(a0)+
 skipvec:
 		dbra d0,init_trap_loop
@@ -595,11 +599,12 @@ probe_memory:
 		move #$2700,sr		; disable interrupts
 		move.l 6(sp),a0
 		move.l vectorbase,a1
+		move.l 8(a1),d1		; save the old vector
 		move.l #probe_error,8(a1)
 		move.l a7,a1
 		moveq #0,d0
 		tst.b (a0)
-probe_out:	move.l #bus_error,8(a1)
+probe_out:	move.l d1,8(a1)		; restore the old vector
 		rte
 probe_error:
 		moveq #1,d0
