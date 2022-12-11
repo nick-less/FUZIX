@@ -1,8 +1,35 @@
 /*
  *	Build options
+ *
+ *	See README.CONFIG
  */
 
-#define CONFIG_RD_SWAP		/* Swap on the ramdisc not GIDE: TO DEBUG */
+#define CONFIG_IDE		/* GIDE */
+#undef CONFIG_SD		/* SD card bitbanged on I/O port */
+#define CONFIG_RD_SWAP		/* Swap on the ramdisc not GIDE */
+#undef CONFIG_PIO_TICK		/* 10Hz square wave on PIO bit 3 for timer */
+#define CONFIG_K1520_SOUND	/* We only use the CTC bits for now */
+#define CONFIG_JKCEMU		/* Work around JKCEMU problems
+                                    - no LBA emulation
+                                    - buggy disk emulation
+                                    - probably a bug in port 4 handling */
+#undef CONFIG_VIDEO_POPPE	/* 64x32 video */
+#undef CONFIG_RTC_70		/* RTC at 0x70 (not GIDE RTC) */
+#undef CONFIG_FDC765		/* Floppy controller (not yet done) */
+
+/*
+ *	Platform configuration
+ */
+
+#ifdef CONFIG_VIDEO_POPPE
+#define MEM_TOP		0xE800
+#define PROC_SIZE	34
+#define SWAP_SIZE	0x45
+#else
+#define MEM_TOP		0xEC00
+#define PROC_SIZE	35
+#define SWAP_SIZE	0x47
+#endif
 
 /* Enable to make ^Z dump the inode table for debug */
 #undef CONFIG_IDUMP
@@ -18,17 +45,14 @@
 #define CONFIG_LARGE_IO_DIRECT(x)	1
 /* One memory bank */
 #define CONFIG_BANKS	1
-#define TICKSPERSEC 10      /* Ticks per second */
-#define PROGBASE    0x6000  /* also data base */
-#define PROGLOAD    0x6000  /* also data base */
-#define PROGTOP     0xE000  /* Top of program */
-#define KERNTOP	    0x6000  /* Grow buffers up to user space */
+#define TICKSPERSEC 10		/* Ticks per second */
+#define PROGBASE    0x6000	/* also data base */
+#define PROGLOAD    0x6000	/* also data base */
+#define PROGTOP     MEM_TOP	/* Top of program */
+#define KERNTOP	    0x5FF0	/* Grow buffers up to user space (5FFx is vectors) */
 
-#define PROC_SIZE   32	  /* Memory needed per process */
-
-#define SWAP_SIZE   0x41 	/* 32.5K in blocks (prog + udata) */
 #define SWAPBASE    0x6000	/* start at the base of user mem */
-#define SWAPTOP	    0xE000	/* Swap out program */
+#define SWAPTOP	    MEM_TOP	/* Swap out program */
 #define CONFIG_SPLIT_UDATA
 #define UDATA_BLKS  1
 #define UDATA_SIZE  0x200	/* One block */
@@ -64,34 +88,49 @@ extern uint16_t swap_dev;
 #define NBUFS    4        /* Number of block buffers, keep in line with space reserved in zeta-v2.s */
 #define NMOUNTS	 2	  /* Number of mounts at a time */
 
-#define MAX_BLKDEV 2	    /* 2 IDE */
+#define MAX_BLKDEV 2	    /* 2 IDE and/or SD*/
 
-/* On-board RTC on the GIDE */
+/* On-board RTC on the GIDE or an RTC card */
+#if defined(CONFIG_IDE) || defined(CONFIG_RTC_70)
 #define CONFIG_RTC
 #define CONFIG_RTC_FULL
 #define CONFIG_RTC_INTERVAL	1
-#define CONFIG_NO_CLOCK
+#endif
 
-/* IDE/CF support */
-#define CONFIG_IDE
-#define CONFIG_IDE_CHS		/* For testing only */
+#if !defined(CONFIG_PIO_TICK) && !defined(CONFIG_K1520_SOUND)
+#define CONFIG_NO_CLOCK
+#endif
+
+#ifdef CONFIG_SD
+#define SD_DRIVE_COUNT 1
+#define SD_SPI_CALLTYPE __z88dk_fastcall
+#endif
+
+/* JKCEMU has some limits */
+#ifdef CONFIG_JKCEMU
+#define CONFIG_IDE_CHS		/* No LBA support in emulation */
 #define IDE_DRIVE_COUNT	1	/* Work around buggy emulator */
+#endif
+
 /* Device parameters */
 #define NUM_DEV_TTY 1		/* Only a console */
 
 /* Console */
 #define CONFIG_VT
-#define CONFIG_VT_SIMPLE
 
+#ifdef CONFIG_VIDEO_POPPE
+#define VT_WIDTH	64
+#define VT_HEIGHT	32
+#define VT_RIGHT	63
+#define VT_BOTTOM	31
+#else
 /* Vt definition */
 #define VT_WIDTH	32
 #define VT_HEIGHT	32
 #define VT_RIGHT	31
 #define VT_BOTTOM	31
 #define VT_INITIAL_LINE	3
-#define VT_BASE	((volatile uint8_t *)0xEC00)
-#define VT_MAP_CHAR(x)	(x)
-
+#endif
 
 /* Video as the console */
 #define BOOT_TTY (512 + 1)

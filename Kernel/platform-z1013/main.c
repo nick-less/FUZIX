@@ -11,7 +11,7 @@ uint16_t swap_dev = 0xFFFF;
 uint16_t ramtop = 0xE000;
 uint8_t need_resched = 0;
 
-uint8_t plt_tick_present;
+uint8_t fdc765_present;
 
 void plt_discard(void)
 {
@@ -27,12 +27,10 @@ void plt_discard(void)
 
 extern uint8_t keycheck(void);
 
-void plt_idle(void)
+static void handle_keys(void)
 {
 	static uint8_t k;
 	uint8_t nk;
-	irqflags_t irq = di();
-	sync_clock();
 	nk = keycheck();
 	/* Key up */
 	if (nk == 0 && k) {
@@ -41,6 +39,13 @@ void plt_idle(void)
 	/* Key down - save the code and wait for it to go back up */
 	} else if (k == 0 && nk)
 		k = nk;
+}
+
+void plt_idle(void)
+{
+	irqflags_t irq = di();
+	handle_keys();
+	sync_clock();
 	irqrestore(irq);
 }
 
@@ -50,12 +55,8 @@ uint8_t plt_param(unsigned char *p)
 	return 0;
 }
 
-/* TODO: PIO timer option */
 void plt_interrupt(void)
 {
-}
-
-void do_beep(void)
-{
-	/* for now */
+	handle_keys();
+	timer_interrupt();
 }

@@ -41,12 +41,23 @@
         .globl l__DISCARD
         .globl s__DATA
         .globl l__DATA
+	.globl s__VECTORS
         .globl kstack_top
 
 	.globl interrupt_handler
 	.globl nmi_handler
 
+	.globl pio0_intr
+
 	.include "kernel.def"
+
+	; Starts at 0x5FF0
+
+	.area _VECTORS
+
+	; Spot for interrupt vectors
+	.word pio0_intr			; pio A
+	.word interrupt_handler		; ctc channel 1
 
 	; Starts at 0x8000
 
@@ -59,6 +70,10 @@ init:
 	in a,(4)		; turn on 4MHz and work around bug? in JKCEMU
 	or a,#0x60		; (wrong in a,(4) if boot with EPROM mapped)
 	out (4),a
+
+	im 2
+	ld a,#(s__VECTORS >> 8)
+	ld i,a
 
 	; Clear the screen
 	ld hl,#0xEC00
@@ -93,6 +108,10 @@ loader:
         ld (hl), #0
         ldir
 
+	in a,(4)		; if possible map out the system ROM
+	or #0x10		; and video memory
+	out (4),a
+
         ; Hardware setup
         call init_hardware
 
@@ -109,7 +128,7 @@ stop:   halt
 ;
 load_sector:
 	ld a,d
-	out (0x4B),a		; LBA
+	out (0x4B),a		; LBA / sector
 	ld a,#1
 	out (0x4A),a		; 1 sector
 	ld a,#0x20
