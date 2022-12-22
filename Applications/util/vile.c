@@ -54,6 +54,21 @@
 
 #define MAX_HEIGHT	255
 
+#if defined(__linux__)
+
+/* Linux lacks strlcpy */
+
+size_t strlcpy(char *dst, const char *src, size_t dstsize)
+{
+  size_t len = strnlen(src, dstsize);
+  size_t cp = len >= dstsize ? dstsize - 1 : len;
+  memcpy(dst, src, cp);
+  dst[cp] = 0;
+  return len;
+}
+
+#endif
+
 /* ---- */
 
 /* A mini look alike to David Given's libcuss. Actually a bit extended and
@@ -162,7 +177,6 @@ void con_force_goto(uint_fast8_t y, uint_fast8_t x)
 
 void con_goto(uint_fast8_t y, uint_fast8_t x)
 {
-#if 0
 	if (screenx == x && screeny == y)
 		return;
 	if (screeny == y && x == 0) {
@@ -174,7 +188,6 @@ void con_goto(uint_fast8_t y, uint_fast8_t x)
 		con_newline();
 		return;
 	}
-#endif	
 	con_force_goto(y, x);
 }
 
@@ -246,16 +259,21 @@ int con_getch(void)
 	return c;
 }
 
-int con_size(uint8_t c)
+int con_size_x(uint8_t c, uint8_t x)
 {
 	if (c == '\t')
-		return 8 - (screenx & 7);
+		return 8 - (x & 7);
 	/* We will leave unicode out 8) */
 	if (c > 127)
 		return 4;
 	if (c < 32 || c == 127)
 		return 2;
 	return 1;
+}
+
+int con_size(uint8_t c)
+{
+	return con_size_x(c, screenx);
 }
 
 static int do_read(int fd, void *p, int len)
@@ -479,7 +497,6 @@ char scratch[512];
  *
  *	Make more vi like
  *	Implement regexps
- *	Add some minimal : commands (:w notably and :n)
  *	Yank/paste
  *	Remove stdio and curses use
  *	Use uint8, uint when we can for speed
@@ -736,7 +753,7 @@ int adjust(int offset, int column)
 	char *p;
 	int i = 0;
 	while ((p = ptr(offset)) < ebuf && *p != '\n' && i < column) {
-		i += con_size(*p);
+		i += con_size_x(*p, i);
 		++offset;
 	}
 	return (offset);
@@ -1246,7 +1263,7 @@ int save(char *fn)
 		mode = 666;
 	else
 		mode = 600;
-	if ((fd = open(fn, O_WRONLY|O_CREAT|O_TRUNC, 0600)) < 0)
+	if ((fd = open(fn, O_WRONLY|O_CREAT|O_TRUNC, mode)) < 0)
 		return 0;
 	if (oldperms != 0xFFFF)
 		fchmod(fd, oldperms & 0777);
@@ -1339,9 +1356,9 @@ static void colon_process(char *buf)
 			buf++;
 		}
 		if (*buf == ' ') {
-			/* FIXME: this should update filename */
 			rename_needed = 1;
 			save_done(buf + 1, quit);
+			strlcpy(filename, buf + 1, 511);
 		} else if (*buf == 0)
 			save_done(filename, quit);
 		else
@@ -1361,7 +1378,7 @@ int colon_mode(void)
 	char buf[132];
 	char *bp = buf;
 	int c;
-	int xp = 0;
+	int xp = 1;	/* The : */
 
 	/* Wipe the status line and prompt */
 	con_goto(screen_height - 1, 0);
@@ -1379,15 +1396,26 @@ int colon_mode(void)
 			colon_process(buf);
 			break;
 		}
+		/* TAB is hard for erase handling so skip it */
+		if (c == '\t') {
+			dobeep();
+			continue;
+		}
 		/* Erase as many symbols as the character took */
 		if (c == 8 || c == 127) {
 			if (bp != buf) {
+				/* This doesn't work for tab but we avoided
+				   tab above. Other symbols are fixed width */
 				uint8_t s = con_size(*--bp);
-				con_goto(screen_height - 1, xp - s);
 				xp -= s;
-				while (s--)
-					con_putc(' ');
 				con_goto(screen_height - 1, xp);
+				if (t_clreol)
+					con_clear_to_eol();
+				else {
+					while (s--)
+						con_putc(' ');
+					con_goto(screen_height - 1, xp);
+				}
 				*bp = 0;
 			}
 		} else {
@@ -1506,7 +1534,7 @@ void display(int redraw)
 			break;
 		/* Normal characters */
 		if (*p != '\n') {
-			uint8_t s = con_size(*p);
+			uint8_t s = con_size_x(*p, j);
 			/* If the symbol fits and is beyond our dirty marker */
 			if (j >= *dirtyp && j + s < screen_width) {
 				/* Move cursor only if needed. We assume
