@@ -1,5 +1,5 @@
 /*
- *	VILE	-	VI Like Editor
+ *	Fleamacs
  *
  *	Based upon:
  *
@@ -49,7 +49,7 @@
 #include <sys/wait.h>
 
 #ifndef HUP
-#define HUP        "vile.hup"
+#define HUP        "fleamacs.hup"
 #endif				/* HUP */
 
 #define MAX_HEIGHT	255
@@ -77,7 +77,7 @@ size_t strlcpy(char *dst, const char *src, size_t dstsize)
 
 uint_fast8_t screenx, screeny, screen_height, screen_width;
 
-static char *t_go, *t_clreol, *t_clreos;
+static char *t_go, *t_clreol, *t_clreos, *t_me, *t_mr;
 static uint8_t conbuf[64];
 static uint8_t *conp = conbuf;
 static mode_t oldperms = 0xFFFF;
@@ -155,6 +155,13 @@ void con_puts(const char *s)
 		con_putc(c);
 }
 
+void con_putsn(const char *s, unsigned n)
+{
+	uint8_t c;
+	while (n-- && (c = (uint8_t) * s++) != 0)
+		con_putc(c);
+}
+
 /* Add a newline */
 void con_newline(void)
 {
@@ -165,9 +172,6 @@ void con_newline(void)
 	screeny++;
 }
 
-/* We need to optimize this but firstly we need to fix our
-   tracking logic as we use con_goto internally but don't track
-   that verus the true user values */
 void con_force_goto(uint_fast8_t y, uint_fast8_t x)
 {
 	con_twrite(tgoto(t_go, x, y), 2);
@@ -234,6 +238,20 @@ void con_clear(void)
 	con_clear_to_bottom();
 }
 
+void con_reverse(void)
+{
+#ifndef __linux__
+	con_twrite(t_mr, 1);
+#endif
+}
+
+void con_normal(void)
+{
+#ifndef __linux__
+	con_twrite(t_me, 1);
+#endif
+}
+
 int con_scroll(int n)
 {
 	if (n == 0)
@@ -241,7 +259,7 @@ int con_scroll(int n)
 	/* For now we don't do backscrolls: FIXME */
 	if (n < 0)
 		return 1;
-	/* Redraw anyway */
+	/* This is a redraw anyway */
 	if (n >= screen_height)
 		return 1;
 	/* Scrolling down we can do */
@@ -344,6 +362,8 @@ static int tty_init(void)
 	close(fd[0]);
 	t_clreol = tnext(t_go);
 	t_clreos = tnext(t_clreol);
+	t_me = tnext(t_clreos);
+	t_mr = tnext(t_me);
 	if (*t_clreos == 0)	/* No clr eos - try for clr/home */
 		t_clreos++;	/* cl cap if present */
 	if (*t_go == 0) {
@@ -358,10 +378,12 @@ static int tty_init(void)
 }
 
 static struct termios con_termios, old_termios;
+static int con_live;
 
 void con_exit(void)
 {
 	tcsetattr(0, TCSANOW, &old_termios);
+	con_live = 0;;
 }
 
 int con_init(void)
@@ -393,6 +415,7 @@ int con_init(void)
 		screen_width = w.ws_col;
 		screen_height = w.ws_row;
 	}
+	con_live = 1;
 	return 0;
 }
 
@@ -402,9 +425,6 @@ int con_init(void)
 typedef struct keytable_t {
 	int key;
 	int flags;
-#define NORPT	1
-#define KEEPRPT	2
-#define USERPT	4
 	int (*func) (void);
 } keytable_t;
 
@@ -413,25 +433,27 @@ int row, col;
 /* These are effectively offsets from a pointer so size_t represents
    the largest valid offset. This makes them unsigned so we must be
    careful on comparisons */
-size_t indexp, page, epage;
+size_t indexp, page, epage, mark;
 int input;
 int repeat;
+int keymode;
+int quoted;
 char *buf;
 char *ebuf;
 char *gap;
 char *egap;
-char *filename;
+char *filetail;
 int modified;
 int rename_needed;
 int status_up;
+int status_dirty;
 
 /* 0 = clean, 1+ = nth char from (1..n) onwards are dirty */
 uint8_t dirty[MAX_HEIGHT + 1];
 uint8_t dirtyn;
 
-/* For now this is needed by save internally, but we will also want a
-   block sized buffer for a few other things later */
-char scratch[512];
+/* Need to find a better way */
+char filepath[512];
 
 /* There are lots of cases we touch n + 1, to avoid having to keep checking
    for last lines make this one bigger */
@@ -498,15 +520,14 @@ char scratch[512];
  *
  *	TODO for Fuzix
  *
- *	Make more vi like
- *	Implement regexps
+ *	Repeat counts
+ *	Remove a few bits no longer used
+ *	Cursor keys
  *	Yank/paste
- *	Remove stdio and curses use
  *	Use uint8, uint when we can for speed
  *	Use memmove not loops
  *	Macros out of the command blocks we have - may need them all to return
  *	an error status
- *	status bars etc in modeless mode
  *	long line support (including fixing insert_mode)
  *
  *	Can we rewrite most of the editor functions in some kind of bytecode
@@ -516,11 +537,12 @@ char scratch[512];
  *	defer the work ?). Need to look at this post curses
  */
 
+void dirty_all(void);
 int adjust(int, int);
 int nextline(int);
 int pos(char *);
 int prevline(int);
-int save(char *);
+int save(const char *);
 char *ptr(int);
 
 void warning(const char *);
@@ -537,11 +559,9 @@ int bottom(void);
 int delete(void);
 int delete_line(void);
 int down(void);
-int insert(void);
-int insert_mode(void);
-int insert_before(void);
-int append_mode(void);
-int append_end(void);
+int insert_nl(void);
+int insert_tab(void);
+int insert_space_r(void);
 int left(void);
 int lnbegin(void);
 int lnend(void);
@@ -557,6 +577,9 @@ int flip(void);
 int up(void);
 int wleft(void);
 int wright(void);
+int wupper(void);
+int wcaps(void);
+int wlower(void);
 int noop(void);
 int digit(void);
 int open_after(void);
@@ -566,40 +589,60 @@ int join(void);
 int eword(void);
 int findleft(void);
 int findright(void);
-int zz(void);
 int do_goto(void);
-int do_del(void);
-int do_change(void);
-int changeend(void);
-int pagetop(void);
-int pagemiddle(void);
-int pagebottom(void);
+int top(void);
+int bottom(void);
 int swapchars(void);
-int bracket(void);
-int colon_mode(void);
+int enter_meta(void);
+int enter_ctrlx(void);
+int enter_quoted(void);
+int filename(void);
+int save_exit(void);
+int save_only(void);
+int load(void);
+int set_mark(void);
+int swap_mark(void);
+int bang_shell(void);
+int run_shell(void);
+int searchf(void);
+int searchr(void);
+int wipe(void);
+
+char *command_prompt(const char *cmd);
 
 #undef CTRL
 #define CTRL(x)                ((x) & 0x1f)
 
 /*
- *	Basic vi commands missing (note not all below exactly match vi yet
- *	in their behaviour - much testing is needed).
+ *	Status:
+ *	Moving cursor:
+ *		Need to add M-N M-P (paragraph)
+ *	Deleting and inserting:
+ *		Done
+ *	More deleting/inserting:
+ *		M-^W ^W M-sp M-W ^X^O ^O
+ *	Searching:
+ *		^XS ^XR
+ *	Replacing:
+ *		M-R M-^R	(need region support)
+ *	Capitalizing/Transposing
+ *		^X^L ^X^U ^Q	(need region support)
+ *	Regions
+ *		Done
+ *	Copying and Moving
+ *		^Y ESC-W
+ *	Formatting
+ *		^XF M-Tab M-Q ^X= M-^C
+ *	Reading From Disk
+ *		^X^F ^X^I ^X^V
+ *	Saving To Disk
+ *		Done
+ *	Accessing the OS
+ *		Done (for relevant stuff)
+ *	Special Keys
+ *		^U M-n M-X (won't do)
  *
- *	CTRL-F/CTRL-B	implemented but not exactly as vi
- *	W and S		word skip with punctuation
- *	[] and ()	sentence and paragraph skip
- *	R		replace mode
- *	cw/ce		change word variants
- *	s		substitute
- *	/ and ?		search forward/back
- *	n/N		next search forward/back
- *	u		undo
- *	dw,de		delete word variants
- *	.		repeat last text changing command
- *
- *	Almost all : functionality
- *	All yank/put functionality
- *	All regexps /?nN
+ *	Need to do repeats, tmp file for yank buffer
  *
  *	Try to write ops as far as possible in terms of each other and a few
  *	non-command 'ops. The goal is to make a lot of this macrocode for size
@@ -608,6 +651,11 @@ int colon_mode(void);
  *	when we started and now' (lets us do d^ d$ etc nicely)
  */
 
+#define META	0x4000
+#define MX	0x2000
+
+#define NORPT	1
+#define KEEPRPT	2
 keytable_t table[] = {
 #ifdef KEY_LEFT
 	{KEY_LEFT, 0, left},
@@ -615,61 +663,63 @@ keytable_t table[] = {
 	{KEY_DOWN, 0, down},
 	{KEY_UP, 0, up},
 #endif
-	{27, NORPT, noop},
-	{'h', 0, left},
-	{'\b', 0, left},
-	{'j', 0, down},
-	{'\n', 0, down},
-	{'k', 0, up},
-	{'l', 0, right},
-	{' ', 0, right},
-	{'b', 0, wleft},
-	{'e', 0, eword},
-	{CTRL('F'), 0, pgdown},	/* Need D for half screen too */
-	{CTRL('B'), 0, pgup},
-	{CTRL('U'), 0, pgup_half},
-	{CTRL('D'), 0, pgdown_half},
-	{'w', 0, wright},
-	{'^', NORPT, lnbegin},
-	{'$', NORPT, lnend},
-	{'G', USERPT, do_goto},	/* Should be 0G */
-	{'i', NORPT, insert_mode},
-	{'I', NORPT, insert_before},
-	{'J', 0, join},
-	{'x', 0, delete},
-	{'X', 0, delete_left},
-	{'o', 0, open_after},
-	{'O', 0, open_before},
-	{'R', NORPT, redraw},
+	{CTRL('B'), 0, left},
+	{'\b', 0, delete_left},
+	{127, 0, delete_left},
+	{CTRL('N'), 0, down},
+	{CTRL('P'), 0, up},
+	{CTRL('F'), 0, right},
+	{META | 'b', 0, wleft},
+	{META | '\b', 0, eword},
+	{CTRL('Z'), 0, pgup_half},
+	{CTRL('V'), 0, pgdown_half},
+	{META |'F', 0, wright},
+	{META |'U', 0, wupper},
+	{META |'C', 0, wcaps},
+	{META |'L', 0, wlower},
+	{CTRL('A'), NORPT, lnbegin},
+	{CTRL('E'), NORPT, lnend},
+	{META | 'G', 0, do_goto},
+	{META | '<', 0, top},
+	{META | '>', 0, bottom},
+	{CTRL('D'), 0, delete},
 	{CTRL('L'), NORPT, redraw},
-	{'Q', NORPT, quit},
-	{'Z', NORPT, zz},
-	{'D', 0, delete_line},	/* Should also be dd */
-	{'a', NORPT, append_mode},
-	{'A', NORPT, append_end},
-	{'r', 0, replace},
-	{'F', NORPT, findleft},
-	{'f', NORPT, findright},
-	{'H', NORPT, pagetop},
-	{'L', NORPT, pagebottom},
-	{'M', NORPT, pagemiddle},
-	{'d', 0, do_del},
-	{'c', 0, do_change},
-	{'C', 0, changeend},
-	{'t', 0, swapchars},
-	{'%', 0, bracket},
-	{'0', KEEPRPT | USERPT, digit},
-	{'1', KEEPRPT | USERPT, digit},
-	{'2', KEEPRPT | USERPT, digit},
-	{'3', KEEPRPT | USERPT, digit},
-	{'4', KEEPRPT | USERPT, digit},
-	{'5', KEEPRPT | USERPT, digit},
-	{'6', KEEPRPT | USERPT, digit},
-	{'7', KEEPRPT | USERPT, digit},
-	{'8', KEEPRPT | USERPT, digit},
-	{'9', KEEPRPT | USERPT, digit},
-	{':', NORPT, colon_mode},
-	{0, 0, noop}
+	{CTRL('K'), 0, delete_line},	/* Should also be dd */
+	{MX | CTRL('C'), NORPT, quit},
+	{MX | 'N', NORPT, filename},
+	{MX | CTRL('R'), NORPT, load},
+	{MX | CTRL('S'), NORPT, save_only},
+	{MX | CTRL('W'), NORPT, save_only},
+	{META | CTRL('\\'), NORPT, save_only},
+	{MX|CTRL('C'), NORPT, quit},
+	{META|'Z', NORPT, save_exit},
+	{CTRL('C'), 0, insert_space_r},
+	{CTRL('T'), 0, swapchars},
+	{META | ' ', 0, set_mark},
+	{MX|CTRL('X'), 0, swap_mark},
+	{MX|'!', 0, bang_shell},
+	{MX|'C', 0, run_shell},
+	{META | '0', KEEPRPT, digit},
+	{META | '1', KEEPRPT, digit},
+	{META | '2', KEEPRPT, digit},
+	{META | '3', KEEPRPT, digit},
+	{META | '4', KEEPRPT, digit},
+	{META | '5', KEEPRPT, digit},
+	{META | '6', KEEPRPT, digit},
+	{META | '7', KEEPRPT, digit},
+	{META | '8', KEEPRPT, digit},
+	{META | '9', KEEPRPT, digit},
+	{27, NORPT, enter_meta},
+	{CTRL('X'), NORPT, enter_ctrlx },
+	{CTRL('Q'), NORPT, enter_quoted },
+	{MX | CTRL('X'), 0, noop },	/* Cancel X- mode */
+	{'\t', 0, insert_tab },
+	{'\n', 0, insert_nl },
+	{'\r', 0, insert_nl },
+	{ CTRL('S'), 0, searchf },
+	{ CTRL('R'), 0, searchr },
+	{ CTRL('W'), 0, wipe },
+	{0, 0, NULL }
 };
 
 
@@ -693,23 +743,55 @@ int pos(char *pointer)
 
 int do_goto(void)
 {
-	if (repeat == -1) {
-		epage = indexp = pos(ebuf);
-		return 0;
+	char *p = command_prompt("Line: ");
+	unsigned n;
+	if (p == NULL)
+		return 1;
+	n = atoi(p);
+	top();
+	while(n-- && down() == 0);
+	return 0;
+}
+
+int top(void)
+{
+	epage = indexp = 0;
+	return 0;
+}
+
+int bottom(void)
+{
+	epage = indexp = pos(ebuf);
+	return 0;
+}
+
+int writeout(int final)
+{
+	char *p;
+	if (!modified)
+		done = final;
+	else {
+		p = command_prompt("Save changes Y/N: ");
+		if (!p) {
+			dobeep();
+			return 1;
+		}
+		*p = toupper(*p);
+		if (*p == 'Y')
+			done = save(filepath);
+		else if (*p == 'N')
+			done = final;
+		else {
+			dobeep();
+			return 1;
+		}
 	}
-	/* FIXME: we need to do line tracking really to do this nicely */
-	indexp = 0;
-	while (repeat-- && !down());
 	return 0;
 }
 
 int quit(void)
 {
-	if (!modified)
-		done = 1;
-	else
-		dobeep();
-	return 0;
+	return writeout(1);
 }
 
 int redraw(void)
@@ -739,16 +821,17 @@ void movegap(void)
 
 int prevline(int offset)
 {
-	char *p;
-	while (buf < (p = ptr(--offset)) && *p != '\n');
+	char *p = buf;
+	while (offset && buf < (p = ptr(--offset)) && *p != '\n');
 	return (buf < p ? ++offset : 0);
 }
 
 int nextline(int offset)
 {
 	char *p;
-	while ((p = ptr(offset++)) < ebuf && *p != '\n');
-	return (p < ebuf ? offset : pos(ebuf));
+	while ((p = ptr(offset)) < ebuf && *p != '\n')
+		offset++;
+	return (p < ebuf ? offset + 1 : pos(ebuf));
 }
 
 int adjust(int offset, int column)
@@ -782,6 +865,8 @@ int right(void)
 
 int up(void)
 {
+	if (indexp == 0)
+		return 1;
 	indexp = adjust(prevline(prevline(indexp) - 1), col);
 	return 0;		/* FIXME */
 }
@@ -849,7 +934,7 @@ int pgup_half(void)
 {
 	int i = screen_height / 2;
 	while (0 < --i) {
-		page = prevline(page - 1);
+//		page = prevline(page - 1);
 		up();
 	}
 	return 0;
@@ -859,38 +944,9 @@ int pgdown_half(void)
 {
 	int i = screen_height / 2;
 	while (0 < --i) {
-		page = nextline(page);
+//		page = nextline(page);
 		down();
 	}
-	return 0;
-}
-
-int pagetop(void)
-{
-	int y = row;
-	while (y--)
-		up();
-	return 0;
-}
-
-int pagemiddle(void)
-{
-	int y = row;
-	int t = screen_height / 2;
-	while (y < t) {
-		down();
-		y++;
-	}
-	while (y-- > t)
-		up();
-	return 0;
-}
-
-int pagebottom(void)
-{
-	int y = row;
-	while (y++ < screen_height - 1)
-		down();
 	return 0;
 }
 
@@ -939,12 +995,50 @@ int eword(void)
 	return p == ebuf;
 }
 
-int wright(void)
+int espace(void)
 {
 	char *p;
-	eword();
 	while (isspace(*(p = ptr(indexp))) && p < ebuf)
 		++indexp;
+	return p == ebuf;
+}
+
+int wright(void)
+{
+	eword();
+	return espace();
+}
+
+int wupper(void)
+{
+	char *p;
+	espace();
+	while (!isspace(*(p = ptr(indexp))) && p < ebuf) {
+		*p = toupper(*p);
+		++indexp;
+	}
+	return p == ebuf;
+}
+
+int wcaps(void)
+{
+	char *p;
+	espace();
+	if(!isspace(*(p = ptr(indexp))) && p < ebuf) {
+		*p = toupper(*p);
+		++indexp;
+	}
+	return eword();
+}
+
+int wlower(void)
+{
+	char *p;
+	espace();
+	while (!isspace(*(p = ptr(indexp))) && p < ebuf) {
+		*p = tolower(*p);
+		++indexp;
+	}
 	return p == ebuf;
 }
 
@@ -984,69 +1078,13 @@ int findright(void)
 	return fright(c);
 }
 
-/* Does it make sense to merge these with fleft/fright ? */
-int findpair(char in, char out, char dir)
-{
-	unsigned int depth = 0;
-
-	while (1) {
-		char *p = ptr(indexp);
-		char c = *p;
-		if (c == in)
-			depth++;
-		if (c == out) {
-			if (--depth == 0)
-				return 0;
-		}
-		if (dir == -1) {
-			if (indexp == 0)
-				return 1;
-			indexp--;
-		} else {
-			if (p == ebuf)
-				return 1;
-			indexp++;
-		}
-	}
-}
-
-
-/* Real vi doesn't match < > but it's two bytes cost to add and really rather
-   useful */
-static const char brackettab[] = "([{<)]}>";
-
-int bracket(void)
-{
-	char c = *ptr(indexp);
-	int ip = indexp;
-	char *x = strchr(brackettab, c);
-
-	if (x == NULL)
-		return 1;
-
-	if (x < brackettab + 4) {
-		if (findpair(*x, x[4], 1) == 0)
-			return 0;
-		indexp = ip;
-		dobeep();
-		return 1;
-	} else {
-		if (findpair(*x, x[-4], -1) == 0)
-			return 0;
-		indexp = ip;
-		dobeep();
-		return 1;
-	}
-}
-
-/* Do we need a filter on this and insert_mode ? */
 int insertch(char ch)
 {
 	movegap();
 	if (gap < egap) {
-		*gap++ = ch == '\r' ? '\n' : ch;
+		*gap++ = ch;
 		dirtyn = 1;
-		if (ch == '\r' || ch == '\n')
+		if (ch == '\n')
 			dirty_below();
 		dirty[row] = col;
 		indexp = pos(egap);
@@ -1056,76 +1094,20 @@ int insertch(char ch)
 	return 1;
 }
 
-int insert(void)
+int insert_tab(void)
 {
-	return insertch(input);
+	return insertch('\t');
 }
 
-int insert_before(void)
+int insert_nl(void)
 {
-	lnbegin();
-	return insert_mode();
+	return insertch('\n');
 }
 
-/* Need to do a replace mode version */
-int insert_mode(void)
+int insert_space_r(void)
 {
-	int ch;
-	movegap();
-	/* Get the cursor in the right spot */
-	display(0);
-	con_flush();
-	while ((ch = con_getch()) != 27) {
-		if (ch == 0)
-			continue;
-		if (ch == '\f' || ch == -1)
-			break;
-		if (ch == '\b' || ch == 127) {
-			/* There is a hard case here where we delete
-			   a newline */
-			if (*gap == '\n') {
-				dirty[row] = 0;
-				dirty_below();
-				dirtyn = 1;
-			}
-			if (buf < gap)
-				--gap;
-		} else if (gap < egap) {
-			*gap++ = ch == '\r' ? '\n' : ch;
-			dirty[row] = 0;
-			if (ch == '\n')
-				dirty_below();
-			dirtyn = 1;
-			modified = 1;
-		}
-		indexp = pos(egap);
-		display_line();
-	}
-	return 0;
-}
-
-int append_mode(void)
-{
-	if (!right())
-		return insert_mode();
-	return 0;
-}
-
-int append_end(void)
-{
-	lnend();
-	return insert_mode();
-}
-
-int replace(void)
-{
-	int c = con_getch();
-	/* FIXME: saner filter ? */
-	if (c < 0 || c > 255)
-		return 1;
-	if (!delete())
-		return insertch(c);
-	return 0;
+	insertch(' ');
+	return left();
 }
 
 static int do_delete_line(void)
@@ -1133,7 +1115,7 @@ static int do_delete_line(void)
 	movegap();
 	while (egap < ebuf && *egap != '\n')
 		indexp = pos(++egap);
-	return delete();
+	return 0;
 }
 
 int delete_line(void)
@@ -1141,7 +1123,6 @@ int delete_line(void)
 	lnbegin();
 	do_delete_line();
 	modified = 1;
-	dirty_below();
 	dirty[row] = 0;
 	dirtyn = 1;
 	return 0;
@@ -1180,85 +1161,149 @@ int delete_left(void)
 	return 1;
 }
 
-int do_del(void)
+int set_mark(void)
 {
-	int c = con_getch();
-	if (c == '$')		/* Delete to end */
-		return do_delete_line();
-	else if (c == 'd') {
-		return delete_line();
-	} else if (c == '^') {
-		while (indexp && *ptr(indexp) != '\n' && !delete_left());
-		return 0;
-	} else {
-		dobeep();
-		return 1;
-	}
-	/* TODO dw and de */
-}
-
-int do_change(void)
-{
-	if (!do_del())
-		return insert_mode();
-	return 1;
-}
-
-int changeend(void)
-{
-	if (!delete_line())
-		return insert_mode();
-	return 1;
-}
-
-int join(void)
-{
-	lnend();
-	if (egap != ebuf)
-		return delete();
-	return 1;
-}
-
-int open_before(void)
-{
-	lnend();
-	if (!insertch('\n'))
-		return append_mode();
-	return 1;
-}
-
-int open_after(void)
-{
-	lnbegin();
-	if (!insertch('\n') && !up())
-		return append_mode();
+	mark = indexp;
+	warning("Mark set");
 	return 0;
 }
 
-int save(char *fn)
+int swap_mark(void)
+{
+	size_t tmp = mark;
+	mark = indexp;
+	indexp = tmp;
+	return 0;
+}
+
+/* Naiive but small algorithm */
+static char *memmem_b(const char *buf, const char *ebuf, const char *find, size_t flen)
+{
+	const char *p = ebuf - flen;
+	while(p >= buf) {
+		if (memcmp(p, find, flen) == 0)
+			return (char *)p;
+		p--;
+	}
+	return NULL;
+}
+
+static char *memmem(const char *buf, const char *ep, const char *find, size_t flen)
+{
+	const char *p = buf;
+	ep -= flen;
+	while(p <= ep) {
+		if (memcmp(p, find, flen) == 0)
+			return (char *)p;
+		p++;
+	}
+	return NULL;
+}
+
+int searchf(void)
+{
+	char *p = command_prompt("Search:");
+	if (p == NULL)
+		return 1;
+	movegap();
+	/* The search area is now linear from egap to ebuf */
+	p = memmem(egap, ebuf, p, strlen(p));
+	if (p == NULL) {
+		warning("Not found");
+		return 1;
+	}
+	indexp = pos(p);
+	return 0;
+}
+
+
+int searchr(void)
+{
+	char *p = command_prompt("Search:");
+	if (p == NULL)
+		return 1;
+	movegap();
+	/* The search area is now linear from start to gap */
+	p = memmem_b(buf, gap, p, strlen(p));
+	if (p == NULL) {
+		warning("Not found");
+		return 1;
+	}
+	indexp = pos(p);
+	return 0;
+}
+
+/* Need a shared helper as "M-W is wipe but writing the block to the scratch
+   yank file and insert file and yankback are identical */
+int wipe(void)
+{
+	size_t bias = indexp - mark;
+	modified = 1;
+	/* Wipes from mark to cursor. See if that does anything */
+	if (indexp < mark)
+		return 1;
+	/* New cursor position (at the mark) */
+	indexp = mark;
+	movegap();
+	/* The data to kill is now from egap upwards for bias */
+	egap += bias;
+	dirty[row] = 255;	/* Optimize later */
+	dirty_below();
+	return 0;
+}
+
+int bang_shell(void)
+{
+	char *p = command_prompt("Command");
+	if (p == NULL)
+		return 1;
+	system(p);
+	return 0;
+}
+
+int run_shell(void)
+{
+	/* Probably should fork/execve this explicitly */
+	char *p = getenv("SHELL");
+	if (p == NULL)
+		p = "/bin/sh";
+	tcsetattr(0, TCSADRAIN, &old_termios);
+	system(p);
+	tcsetattr(0, TCSADRAIN, &con_termios);
+	con_getch();
+	return 0;
+}
+
+int enter_meta(void)
+{
+	keymode = META;
+	warning("M-");
+	return 0;
+}
+
+int enter_ctrlx(void)
+{
+	keymode = MX;
+	warning("^X-");
+	return 0;
+}
+
+int enter_quoted(void)
+{
+	quoted = 1;
+	warning("Quote-");
+	return 0;
+}
+
+int save(const char *path)
 {
 	int fd;
 	int i;
 	size_t length;
-	char *gptr;
 	mode_t mode;
+	char *gptr;
 
-	strlcpy(scratch, fn, 511);
-	gptr = scratch + strlen(scratch);
-	*gptr++ = '~';
-	*gptr = 0;
-
-	/* Rename the original but not more working copies */
-	if (rename_needed) {
-		/* Rename the old file - if it exists */
-		unlink(scratch);
-		if (link(fn, scratch) == 0) {
-			if (unlink(fn))
-				return 0;
-		} else if (errno != ENOENT)
-			return 0;
-		rename_needed = 0;
-	}
+	/* TODO safe saving with backup */
 
 	/* Open file: if no permissions to set use rw/rw/rw + umask
 	   if not force it, but take care to start private */
@@ -1266,7 +1311,7 @@ int save(char *fn)
 		mode = 0666;
 	else
 		mode = 0600;
-	if ((fd = open(fn, O_WRONLY|O_CREAT|O_TRUNC, mode)) < 0)
+	if ((fd = open(path, O_WRONLY|O_CREAT|O_TRUNC, mode)) < 0)
 		return 0;
 	if (oldperms != 0xFFFF)
 		fchmod(fd, oldperms & 0777);
@@ -1292,7 +1337,7 @@ int save(char *fn)
 	return 1;
 }
 
-int save_done(char *path, uint8_t n)
+int save_done(const char *path, uint8_t n)
 {
 	/* Check if changed ? */
 	if (!save(path))
@@ -1302,14 +1347,18 @@ int save_done(char *path, uint8_t n)
 	return 1;
 }
 
-int zz(void)
+int save_only(void)
 {
-	int c = con_getch();
-	if (c != 'Z' && c != 'z') {
-		dobeep();
-		return 0;
+	if (!save(filepath)) { 
+		warning(strerror(errno));
+		return 1;
 	}
-	return save_done(filename, 1);
+	return 0;
+}
+
+int save_exit(void)
+{
+	return save_done(filepath, 1);
 }
 
 int noop(void)
@@ -1324,82 +1373,120 @@ void status_wipe(void)
 	status_up = 0;
 }
 
-/*
- *	We need to emulate a minimal subset of commands people habitually use
- *
- *	:q :q!
- *	:x
- *
- *	:w :w! (with path)
- *	:r (maybe)
- *	:number
- *	:s/
- *	:e file
- *	:!shell
- *	!!
- */
-static void colon_process(char *buf)
+static void file_set_tail(void)
 {
-	int quit = 0;
-	if (*buf == 'q') {
-		if (!modified || buf[1] == '!')
-			done = 1;
-		else
-			warning("No write since last change.");
-		return;
-	}
-	if (*buf == 'x') {
-		save_done(filename, 1);
-		return;
-	}
-	if (*buf == 'w') {
-		buf++;
-		if (*buf == 'q') {
-			quit = 1;
-			buf++;
-		}
-		if (*buf == ' ') {
-			rename_needed = 1;
-			save_done(buf + 1, quit);
-			/* FIMXE: should change filename */
-		} else if (*buf == 0)
-			save_done(filename, quit);
-		else
-			warning("unknown :w option.");
-		return;
-	}
-	if (isdigit(*buf)) {
-		repeat = atoi(buf);
-		do_goto();
-		return;
-	}
-	warning("unknown : command.");
+	filetail = strrchr(filepath, '/');
+	if (filetail == NULL)
+		filetail = filepath;
+	else
+		filetail++;
 }
 
-int colon_mode(void)
+int filename(void)
 {
-	char buf[132];
+	char *p = command_prompt("Name: ");
+	if (p) {
+		strlcpy(filepath, p, 511);
+		file_set_tail();
+		status_dirty = 1;
+		return 0;
+	}
+	return 1;
+}
+
+static int doread(const char *name, int fd, char *ptr, int size)
+{
+	int n = read(fd, ptr, size);
+	if (n == -1) {
+		perror(name);
+		exit(2);
+	}
+	return n;
+}
+
+static int loadfile(char *p)
+{
+	struct stat t;
+	int fd;
+
+	gap = buf;
+	egap = ebuf;
+
+	dirty_all();
+
+	strlcpy(filepath, p, 511);
+	fd = open(filepath, O_RDONLY);
+	if (fd == -1 && errno != ENOENT)
+		goto bad;
+	if (fd != -1) {
+		size_t size;
+		size_t o = 0;
+		int n = 0;
+		size = ebuf - buf;
+		/* We can have 32bit ptr, 16bit int even in theory */
+		if (size >= 8192) {
+			while ((n = doread(p, fd, buf + o, 8192)) > 0) {
+				gap += n;
+				size -= n;
+				o += n;
+			}
+		} else
+			n = doread(p, fd, buf + o, size);
+		if (n < 0)
+			goto bad;
+		gap += n;
+		if (fstat(fd, &t) == 0)
+			oldperms = t.st_mode;
+		close(fd);
+	}
+	rename_needed = 1;
+	return 0;
+
+bad:
+	if (con_live == 0)
+		perror(p);
+	else
+		warning(strerror(errno));
+	return 1;
+
+}
+
+int load(void)
+{
+	writeout(0);
+	if (filename())
+		return 1;
+	loadfile(filepath);
+	top();
+	return 0;
+}
+
+/*
+ *	Prompt for input on the bottom line
+ */
+char *command_prompt(const char *x)
+{
+	static char buf[132];
 	char *bp = buf;
 	int c;
-	int xp = 1;	/* The : */
+	int xp = strlen(x);	/* Assume no funny chars */
 
 	/* Wipe the status line and prompt */
 	con_goto(screen_height - 1, 0);
-	con_putc(':');
+	con_puts(x);
 	con_clear_to_eol();
-	con_goto(screen_height - 1, 0);
+	con_goto(screen_height - 1, xp);
 
 	*bp = 0;
 	while (1) {
 		c = con_getch();
-		if (c < 0 || c > 255 || c == 27) {
-			dobeep();
-			break;
+		if (c < 0 || c > 255 || c == CTRL('G')) {
+			status_wipe();
+			return NULL;
 		}
-		if (c == '\n' || c == '\r') {
-			colon_process(buf);
+		if (c == '\n' || c == '\r')
 			break;
-		}
+
 		/* TAB is hard for erase handling so skip it */
 		if (c == '\t') {
 			dobeep();
@@ -1435,7 +1522,7 @@ int colon_mode(void)
 	}
 	/* Clean the status line */
 	status_wipe();
-	return 0;
+	return buf;
 }
 
 void warning(const char *p)
@@ -1491,7 +1578,7 @@ void display(int redraw)
 		page = prevline(indexp);
 	if (epage <= indexp) {
 		page = nextline(indexp);
-		i = page == pos(ebuf) ? screen_height - 2 : screen_height;
+		i = page == pos(ebuf) ? screen_height - 2 : screen_height - 2;
 		while (0 < i--)
 			page = prevline(page - 1);
 	}
@@ -1502,10 +1589,15 @@ void display(int redraw)
 	opage -= page;
 
 	/* If we can't scroll this then redraw the lot */
-	if (opage && con_scroll(opage))
+	/* TODO: see if its worth doing a scroll and repaint for the lower
+	   lines */
+	if (1 || opage && con_scroll(opage)) {
 		redraw = 1;
-	else
+		status_dirty = 1;
+	} else {
 		adjust_dirty(opage);
+		status_dirty = 1;
+	}
 
 	if (redraw)
 		dirty_all();
@@ -1534,7 +1626,7 @@ void display(int redraw)
 		}
 		p = ptr(epage);
 		/* We ran out of screen or buffer */
-		if (screen_height <= i || ebuf <= p)
+		if (screen_height - 2 <= i || ebuf <= p)
 			break;
 		/* Normal characters */
 		if (*p != '\n') {
@@ -1575,14 +1667,24 @@ void display(int redraw)
 		*dirtyp = 255;
 	}
 	/* Now mark out the unused lines with ~ markers if needed */
-	while (++i < screen_height) {
+	while (++i < screen_height - 2) {
 		if (*dirtyp != 255) {
 			*dirtyp = 255;
 			con_goto(i, 0);
-			con_putc('~');
 			con_clear_to_eol();
 		}
 		dirtyp++;
+	}
+	if (status_dirty) {
+		con_goto(screen_height - 2, 0);
+		con_reverse();
+		con_puts("-- fleamacs: ");
+		con_putsn(filetail, screen_width - 4);	
+		con_putc(' ');
+		while(screenx)	/* Will wrap at line end */
+			con_putc('-');
+		con_normal();
+		status_dirty = 0;
 	}
 	/* Put the cursor back where the user expects it to be */
 	con_goto(row, col);
@@ -1606,19 +1708,8 @@ void oom(void)
 	exit(1);
 }
 
-static int doread(const char *name, int fd, char *ptr, int size)
-{
-	int n = read(fd, ptr, size);
-	if (n == -1) {
-		perror(name);
-		exit(2);
-	}
-	return n;
-}
-
 int main(int argc, char *argv[])
 {
-	int fd;
 	uint8_t mem;
 	uint8_t i;
 
@@ -1635,65 +1726,59 @@ int main(int argc, char *argv[])
 	}
 	gap = buf;
 	egap = ebuf;
+
 	if (argc < 2)
-		filename = "";
+		*filepath = 0;
 	else {
-		struct stat t;
-		fd = open(filename = *++argv, O_RDONLY);
-		if (fd == -1 && errno != ENOENT) {
-			perror(*argv);
-			return 2;
-		}
-		if (fd != -1) {
-			size_t size;
-			size_t o = 0;
-			int n = 0;
-			size = ebuf - buf;
-			/* We can have 32bit ptr, 16bit int even in theory */
-			if (size >= 8192) {
-				while ((n = doread(*argv, fd, buf + o, 8192)) > 0) {
-					gap += n;
-					size -= n;
-					o += n;
-				}
-			} else
-				n = doread(*argv, fd, buf + o, size);
-			if (n < 0) {
-				perror(*argv);
-				return 2;
-			}
-			gap += n;
-			if (fstat(fd, &t) == 0)
-				oldperms = t.st_mode;
-			close(fd);
-		}
-		rename_needed = 1;
+		if (loadfile(*++argv))
+			exit(2);
 	}
+
+	file_set_tail();
 
 	if (con_init())
 		return (3);
 
+	con_clear();
 	con_goto(0,0);
 
 	signal(SIGHUP, hupped);
-	do_goto();
+	top();
+	status_dirty = 1;
 	display(1);
 	repeat = -1;
 	while (!done) {
 		display(0);
 		i = 0;
 		input = con_getch();
+		if (keymode)
+			input = toupper(input);
+		if (!quoted)
+			input |= keymode;
+
 		if (status_up)
 			status_wipe();
+
+		if (quoted) {
+			quoted = 0;
+			insertch(input & 0xFF);
+			continue;
+		}
+
 		while (table[i].key != 0 && input != table[i].key)
 			++i;
-		if (repeat < 2 || (table[i].flags & (NORPT | USERPT)))
+		if (keymode && !table[i].func) { 
+			dobeep();
+			keymode = 0;
+			continue;
+		}
+		keymode = 0;
+		if (table[i].func)
 			(*table[i].func) ();
+		else if (input >= ' ' && input != 127)
+			insertch(input);
 		else
-			while (repeat--)
-				(*table[i].func) ();
-		if (!(table[i].flags & KEEPRPT))
-			repeat = -1;
+			dobeep();
 	}
 	con_goto(screen_height - 1, 0);
 	con_clear_to_eol();
