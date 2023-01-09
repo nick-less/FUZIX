@@ -6,9 +6,9 @@
 	        .area _CODE2
 		; We need this to be above 0x8000
 		.area _HOME
-		.area _VIDEO
 		; RAM based or may be copied to/from by the user
 	        .area _COMMONMEM
+		.area _VIDEO
 	        .area _CONST
 	        .area _INITIALIZED
 	        .area _GSINIT
@@ -17,7 +17,7 @@
 	        .area _BSS
 	        .area _HEAP
 	        .area _DATA
-		; Need to do dynamic buffers yet
+		.area _BUFFERS
 		.area _DISCARD
 	        .area _INITIALIZER
 
@@ -57,7 +57,3 @@ do_get_sub_slot_2:			; Get complemented slot bits
 		out (c),e
 		ret
 		; 4A-4F free
-
-; Just so we don't pack the binary
-
-		.area _PAGE0

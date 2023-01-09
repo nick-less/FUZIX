@@ -9,7 +9,7 @@
 /* Swap based one process in RAM */
 #define CONFIG_SWAP_ONLY
 /* Permit large I/O requests to bypass cache and go direct to userspace */
-#define CONFIG_LARGE_IO_DIRECT(x)	direct_io_range(x)
+#define CONFIG_LARGE_IO_DIRECT(x)	1
 /* One memory bank */
 #define CONFIG_BANKS	1
 #define TICKSPERSEC 50      /* Ticks per second */
@@ -55,7 +55,7 @@ extern uint16_t swap_dev;
 #define CMDLINE	NULL  /* Location of root dev name */
 #define BOOTDEVICENAMES "hd#,fd"
 
-//#define CONFIG_DYNAMIC_BUFPOOL /* we expand bufpool to overwrite the _DISCARD segment at boot */
+#define CONFIG_DYNAMIC_BUFPOOL /* we expand bufpool to overwrite the _DISCARD segment at boot */
 #define NBUFS    5        /* Number of block buffers, keep in line with space reserved in zeta-v2.s */
 #define NMOUNTS	 2	  /* Number of mounts at a time */
 
