@@ -19,11 +19,11 @@
         ; note that areas below here may be overwritten by the heap at runtime, so
         ; put initialisation stuff in here
         .area _BUFFERS     ; _BUFFERS grows to consume all before it (up to KERNTOP)
-        .area _INITIALIZER
         .area _GSINIT
         .area _GSFINAL
         .area _DISCARD
 	.area _FONT
+        .area _INITIALIZER
         .area _COMMONMEM
 
         ; imported symbols
@@ -55,7 +55,11 @@ init:
 	; and then the font
         ld de, #s__FONT
         ld bc, #l__FONT
+	ld a,b
+	or c
+	jr 	z, nofont
         ldir
+nofont:
         ; and the discard
         ld de, #s__DISCARD
         ld bc, #l__DISCARD

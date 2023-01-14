@@ -5,6 +5,9 @@
 #include <ps2mouse.h>
 #include <printf.h>
 
+/* Some platforms polling the mouse is expensive so let them query */
+uint_fast8_t ps2m_open;
+
 static uint_fast8_t open;
 static uint_fast8_t fivebutton;
 
@@ -14,7 +17,7 @@ static uint_fast8_t fivebutton;
 #define FAIL 0x200
 #define STOP 0xFFFF
 
-static uint16_t mouse_init[] = {
+static const uint16_t mouse_init[] = {
     SEND|0xFF,
     FAIL|0xFA,
     FAIL|0xAA,
@@ -25,7 +28,7 @@ static uint16_t mouse_init[] = {
     /* May bee followed by an FA or FE */
 };
 
-static uint16_t mouse_scrolltest[] = {
+static const uint16_t mouse_scrolltest[] = {
     SEND|0xF3,			/* Set sample rate */
     FAIL|0xFA,			/* Magic handshake is to 200,100,80 */
     SEND|0xC8,
@@ -44,7 +47,7 @@ static uint16_t mouse_scrolltest[] = {
     STOP
 };
 
-static uint16_t mouse_fivetest[] = {
+static const uint16_t mouse_fivetest[] = {
     SEND|0xF3,			/* Set sample rate */
     FAIL|0xFA,			/* Magic handshake is to 200,200,80 */
     SEND|0xC8,
@@ -63,7 +66,7 @@ static uint16_t mouse_fivetest[] = {
     STOP
 };
 
-static uint16_t mouse_setup[] = {
+static const uint16_t mouse_setup[] = {
     SEND|0xE6,			/* Scaling 1:1 */
     FAIL|0xFA,
     SEND|0xF3,			/* 10 samples a second */
@@ -73,20 +76,20 @@ static uint16_t mouse_setup[] = {
     STOP
 };
 
-static uint16_t mouse_open[] = {
+static const uint16_t mouse_open[] = {
     SEND|0xF4,
     FAIL|0xFA,
     STOP
 };
 
-static uint16_t mouse_close[] = {
+static const uint16_t mouse_close[] = {
     SEND|0xF5,
     FAIL|0xFA,
     STOP
 };
 
 /* One day we might want to handle FE/FC rules */
-static unsigned mouse_op(uint16_t *op)
+static unsigned mouse_op(const uint16_t *op)
 {
     uint8_t r;
     ps2busy = 1;
@@ -152,6 +155,7 @@ uint_fast8_t ps2mouse_open(void)
 {
     open =  mouse_op(mouse_open);
     packc = 0;
+    ps2m_open++;
     return open;
 }
 
@@ -159,6 +163,7 @@ void ps2mouse_close(void)
 {
     open = 0;
     mouse_op(mouse_close);
+    ps2m_open--;
 }
 
 int ps2mouse_init(void)

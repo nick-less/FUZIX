@@ -5,6 +5,7 @@
 #include <tty.h>
 #include <vt.h>
 #include <devtty.h>
+#include <graphics.h>
 
 static uint8_t tbuf1[TTYSIZ];
 
@@ -12,6 +13,37 @@ static uint8_t sleeping;
 
 static uint8_t vtbuf[256];
 static uint8_t *vtptr = vtbuf;
+static uint8_t vidmode;
+
+static const struct display mode[2] = {
+	{
+		0,
+		64, 32,
+		32, 16,
+		255, 255,
+		FMT_4PIXEL_128,
+		HW_UNACCEL,
+		GFX_MAPPABLE|GFX_MULTIMODE|GFX_TEXT
+	}, {
+		0,
+		128, 96,
+		0, 0,
+		255, 255,
+		FMT_COLOUR4,
+		HW_UNACCEL,
+		GFX_MAPPABLE|GFX_MULTIMODE
+	}
+};
+
+struct videomap videomap = {
+	0,
+	0,
+	0x7000,
+	0x0800,
+	0, 0,
+	1,
+	MAP_FBMEM_SIMPLE|MAP_FBMEM
+};
 
 uint8_t vtattr_cap = 0;		/* TODO: colour */
 struct s_queue ttyinq[NUM_DEV_TTY + 1] = {	/* ttyinq[0] is never used */
@@ -36,7 +68,8 @@ int tty_carrier(uint_fast8_t minor)
 static void vtflush(void)
 {
 	if (vtptr != vtbuf) {
-		vtoutput(vtbuf, vtptr-vtbuf);
+		if (vidmode == 0)
+			vtoutput(vtbuf, vtptr-vtbuf);
 		vtptr = vtbuf;
 	}
 }
@@ -72,7 +105,9 @@ void kputchar(uint_fast8_t c)
 	vtflush();
 	if (c == '\n')
 		kputchar('\r');
-	vtoutput(&c, 1);
+	if (vidmode == 0)
+		vtoutput(&c, 1);
+	vtflush();
 }
 
 uint8_t keyboard[8][6] = {
@@ -118,28 +153,58 @@ static int keysdown = 0;
 
 static void update_keyboard(void)
 {
+	/* TODO: can we check the whole keyboard with a single (6800) !+ 0xFF if
+	   we know it was all up before ? */
 	__asm
 		ld hl,#_keybuf
-		ld bc, #0x68FE
-		ld e, #8        ; 8 keyboard ports, 7FFE, BFFE, DFFE and so on
+		ld de, #0x68FE
+		ld b, #8        ; 8 keyboard ports, 7FFE, BFFE, DFFE and so on
 	read_halfrow:
-		in a, (c)
+		ld a, (de)
 		cpl
 		ld (hl), a
-		rlc b
+		rlc e
 		inc hl
-		dec e
-		jr nz, read_halfrow
+		djnz read_halfrow
 	__endasm;
 }
+
+static uint8_t cursor[4] = { KEY_LEFT, KEY_DOWN, KEY_UP, KEY_RIGHT };
+
+static void keydecode(void)
+{
+	uint8_t c;
+
+	uint8_t ss = keymap[1] & 0x08;	/* SHIFT */
+	uint8_t cs = keymap[2] & 0x08;	/* CTRL (we use for caps) */
+
+	c = keyboard[keybyte][keybit];
+	/* ctrl-shift => ctrl */
+	if (cs && ss) {
+		/* Don't map the arrows, but map 'rubout'. The arrows include
+		   symbols like ctrl-m we want to be able to use */
+		if (c == ';')
+			c = KEY_BS;
+		else
+			c &= 31;
+	} else if (cs) {
+		if (c >= 'a' && c <= 'z')
+			c -= 'a' - 'A';
+	} else if (ss)
+		c = shiftkeyboard[keybyte][keybit];
+	tty_inproc(1, c);
+}
+
 
 void tty_pollirq(unsigned irq)
 {
 	int i;
 
 	/* Try and do vt updates on the vblank to reduce snow */
-	if (irq)
+	if (1 || irq) {
 		vtflush();
+		wakeup(&vidmode);
+	}
 
 	update_keyboard();
 
@@ -150,7 +215,7 @@ void tty_pollirq(unsigned irq)
 		uint8_t key = keybuf[i] ^ keymap[i];
 		if (key) {
 			uint8_t m = 0x20;
-			for (n = 4; n >= 0; n--) {
+			for (n = 5; n >= 0; n--) {
 				if ((key & m) && (keymap[i] & m))
 					if (!(shiftmask[i] & m))
 						keysdown--;
@@ -179,28 +244,31 @@ void tty_pollirq(unsigned irq)
 	}
 }
 
-static uint8_t cursor[4] = { KEY_LEFT, KEY_DOWN, KEY_UP, KEY_RIGHT };
-
-static void keydecode(void)
+int gfx_ioctl(uint8_t minor, uarg_t arg, char *ptr)
 {
-	uint8_t c;
-
-	uint8_t ss = keymap[1] & 0x08;	/* SHIFT */
-	uint8_t cs = keymap[2] & 0x08;	/* CTRL (we use for caps) */
-
-	c = keyboard[keybyte][keybit];
-	/* ctrl-shift => ctrl */
-	if (cs && ss) {
-		/* Don't map the arrows, but map 'rubout'. The arrows include
-		   symbols like ctrl-m we want to be able to use */
-		if (c == ';')
-			c = KEY_BS;
-		else
-			c &= 31;
-	} else if (cs) {
-		if (c >= 'a' && c <= 'z')
-			c -= 'a' - 'A';
-	} else if (ss)
-		c = shiftkeyboard[keybyte][keybit];
-	tty_inproc(1, c);
+	uint8_t m;
+	switch(arg) {
+	case GFXIOC_GETINFO:
+		return uput(&mode[vidmode], ptr, sizeof(struct display));
+	case GFXIOC_MAP:
+		return uput(&videomap, ptr, sizeof(struct videomap));
+	case GFXIOC_GETMODE:
+	case GFXIOC_SETMODE:
+		m = ugetc(ptr);
+		if (m > 1) {
+			udata.u_error = EINVAL;
+			return -1;
+		}
+		if (arg == GFXIOC_GETMODE)
+			return uput(&mode[vidmode], ptr, sizeof(struct display));
+		vidmode = m;
+		vtflush();
+		*((volatile uint8_t *)0x6800) = vidmode << 3;
+		return 0;
+	case GFXIOC_WAITVB:
+		psleep(&vidmode);
+		return 0;
+	/* TODO select orange/buff v green */
+	}
+	return vt_ioctl(minor, arg, ptr);
 }

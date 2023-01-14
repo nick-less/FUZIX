@@ -23,6 +23,7 @@
 	.globl _plt_monitor
 	.globl _bufpool
 	.globl _int_disabled
+	.globl _interrupt_setup
 
         ; imported symbols
 	.globl init
@@ -60,22 +61,12 @@ kernel_endmark:
 init_hardware:
 	ld	hl,#90
 	ld	(_ramsize), hl
-	ld	hl,#32
+	ld	hl,#30
 	ld	(_procmem), hl
-	ld	a,#0xC3
-	ld	(0),a
-	ld	(38),a
-	ld	(66),a
-	ld	hl,#null_handler
-	ld	(1),hl
-	ld	(39),hl
-	ld	hl,#interrupt_handler
-	ld	(67),hl
-	ld	hl,#nmi_handler
 	ret
 
 ;=========================================================================
-; Common Memory (mapped low below ROM)
+; Common Memory between 7800-87FF
 ;=========================================================================
         .area _COMMONMEM
 
@@ -84,15 +75,80 @@ _plt_reboot:
 	di
 	halt
 
+; Install the interrupt vector now the discard can be trashed
+_interrupt_setup:
+	ld	hl,#0x787D
+	ld	(hl),#0xC3
+	ld	de,#interrupt_stub
+	inc	 hl
+	ld	(hl),e
+	inc	hl
+	ld	(hl),d
+	ei
+	xor	a
+	ld	(_int_disabled),a
+	ret
+
+interrupt_stub:
+	pop	hl		; return
+	pop	hl
+	pop	de
+	pop	bc
+	pop	af		; unwind rom
+	jp	interrupt_handler	; and do our thing
+
 ;=========================================================================
+
+		.globl _postinit
 
 _int_disabled:
 	.db 1
+_postinit:
+	.db 0
 
 ; install interrupt vectors
 _program_vectors:
 ; platform fast interrupt hook
 plt_interrupt_all:
+	ret
+
+;
+;	Custom interrupt handling. We have to keep interrupts off until
+;	after early boot.
+;
+		.globl _di
+		.globl ___hard_di
+
+_di:
+	jp	___hard_di
+
+		.globl _ei
+		.globl ___hard_ei
+
+_ei:
+	ld	a,(_postinit)
+	or	a
+	ret	z
+	jp	___hard_ei
+
+		.globl _irqrestore
+
+_irqrestore:
+	pop	bc
+	pop	de
+	pop	hl
+	push	hl
+	push	de
+	push	bc
+	di
+	ld	a,l
+	ld	(_int_disabled),a
+	or	a
+	ret	nz
+	ld	a,(_postinit)
+	or	a
+	ret	z
+	ei
 	ret
 
 ;=========================================================================
@@ -138,7 +194,7 @@ map_process_always_di:
 	ld	(oldmap),a	; remember our bank
 	ld	a,#0x7		; RAM low, bank 1
 	ld	(mapreg),a
-	out	(58),a
+	out	(55),a
 	pop	af
 	ret
 
@@ -190,6 +246,8 @@ map_save_kernel:
 	push	af
 	ld	a,(mapreg)
 	ld	(save_map),a
+	ld	a,#3
+	ld	(mapreg),a
 	out	(55),a
 	pop	af
 	ret
@@ -229,6 +287,8 @@ outchar:
 	ret
 
 ;
+	.area _COMMONMEM
+
 ;	Banking support
 ;
 	.globl __bank_0_1
@@ -254,6 +314,7 @@ bank0:
 	push	hl
 	ex	de,hl
 	ld	bc,(mapreg)	; old bank into C
+	ld	(mapreg),a
 	out	(55),a		; Switch bank
 	bit	1,c		; Which bank ?
 	jr	z, retbank1

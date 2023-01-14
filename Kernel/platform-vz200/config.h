@@ -5,13 +5,14 @@
  */
 
 #define CONFIG_SD		/* SD card bitbanged on I/O port */
+
 /*
  *	Platform configuration
  */
 
 #define MEM_TOP		0xFFFF
-#define PROC_SIZE	32
-#define SWAP_SIZE	0x41
+#define PROC_SIZE	30
+#define SWAP_SIZE	0x3F	/* FIXME */
 
 /* Enable to make ^Z dump the inode table for debug */
 #undef CONFIG_IDUMP
@@ -28,13 +29,13 @@
 /* One memory bank */
 #define CONFIG_BANKS	1
 #define TICKSPERSEC 50		/* Ticks per second - NTSC 60 ? FIXME */
-#define PROGBASE    0x8000	/* also data base */
-#define PROGLOAD    0x8000	/* also data base */
+#define PROGBASE    0x8800	/* also data base */
+#define PROGLOAD    0x8800	/* also data base */
 #define PROGTOP     0xFFFF	/* Top of program */
 #define KERNTOP	    0xFFFF	/* Grow buffers up to top */
 
-#define SWAPBASE    0x8000	/* start at the base of user mem */
-#define SWAPTOP	    0xFFFF	/* Swap out program */
+#define SWAPBASE    0x8800	/* start at the base of user mem */
+#define SWAPTOP	    0x10000	/* Swap out program */
 #define CONFIG_SPLIT_UDATA
 #define UDATA_BLKS  1
 #define UDATA_SIZE  0x200	/* One block */
@@ -47,6 +48,8 @@ extern uint16_t swap_dev;
 
 #define MAXTICKS    20		/* As we are pure swap */
 #define CONFIG_PARENT_FIRST	/* For pure swap this is far faster */
+
+#define CONFIG_PLATFORM_LATE_EI
 
 /*
  *	When the kernel swaps something it needs to map the right page into
@@ -67,7 +70,6 @@ extern uint16_t swap_dev;
 #define MAX_BLKDEV 1	    /* SD */
 
 #define SD_DRIVE_COUNT 1
-#define SD_SPI_CALLTYPE __z88dk_fastcall
 
 /* Device parameters */
 #define NUM_DEV_TTY 1		/* Only a console */
@@ -75,12 +77,13 @@ extern uint16_t swap_dev;
 /* Console */
 #define CONFIG_VT
 
-#define CONFIG_VT_SIMPLE
+/* TODO: 32 x 24 if hires available */
 #define VT_WIDTH	32
-#define VT_HEIGHT	16
+#define VT_HEIGHT	vtrows
 #define VT_RIGHT	31
-#define VT_BOTTOM	15
-#define VT_BASE	((uint8_t *)0x7000)
+#define VT_BOTTOM	vtbottom
+
+extern uint8_t vtrows, vtbottom;
 
 extern unsigned char vt_mangle_6847(unsigned char c);
 #define VT_MAP_CHAR(x)	vt_mangle_6847(x)
@@ -92,3 +95,8 @@ extern unsigned char vt_mangle_6847(unsigned char c);
 #define TTYDEV   BOOT_TTY /* Device used by kernel for messages, panics */
 
 #define plt_copyright()
+
+/* Special interrupt handling. We don't have fancy IRQ levels as this
+   implies, instead we need to fiddle with ei during preboot */
+
+#define CONFIG_SOFT_IRQ
