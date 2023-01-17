@@ -121,7 +121,7 @@ uint8_t keyboard[8][6] = {
 	{ 'h','l',':','k',';','j' }
 };
 
-static uint8_t shiftmask[8] = { 0, 0, 0x08, 0x08, 0, 0, 0, 0 };
+static uint8_t shiftmask[8] = { 0, 0x04, 0x04, 0, 0, 0, 0, 0 };
 
 /* The VZ200 lacks {} | ~ so we map these onto UIJY */
 uint8_t shiftkeyboard[8][6] = {
@@ -175,8 +175,8 @@ static void keydecode(void)
 {
 	uint8_t c;
 
-	uint8_t ss = keymap[1] & 0x08;	/* SHIFT */
-	uint8_t cs = keymap[2] & 0x08;	/* CTRL (we use for caps) */
+	uint8_t ss = keymap[1] & 0x04;	/* SHIFT */
+	uint8_t cs = keymap[2] & 0x04;	/* CTRL (we use for caps) */
 
 	c = keyboard[keybyte][keybit];
 	/* ctrl-shift => ctrl */
@@ -201,10 +201,15 @@ void tty_pollirq(unsigned irq)
 	int i;
 
 	/* Try and do vt updates on the vblank to reduce snow */
-	if (1 || irq) {
+	if (irq) {
 		vtflush();
 		wakeup(&vidmode);
 	}
+
+	/* If no key was down and all the keyyboard rows scanned at once
+	   says everything is up then skip doing any work */
+	if (keysdown == 0 && *((volatile uint8_t *)0x6800) == 0xFF)
+		return;
 
 	update_keyboard();
 

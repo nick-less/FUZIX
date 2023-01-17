@@ -1,10 +1,15 @@
 /*
  *	Build options
- *
- *	See README.CONFIG
  */
 
-#define CONFIG_SD		/* SD card bitbanged on I/O port */
+#define CONFIG_PAL			/* Otherwise NTSC */
+ 
+ 
+/*
+ *	We support the SD card only
+ */
+
+#define CONFIG_TD_NUM	1		/* SD card bitbanged on I/O port */
 
 /*
  *	Platform configuration
@@ -12,7 +17,7 @@
 
 #define MEM_TOP		0xFFFF
 #define PROC_SIZE	30
-#define SWAP_SIZE	0x3F	/* FIXME */
+#define SWAP_SIZE	0x3D
 
 /* Enable to make ^Z dump the inode table for debug */
 #undef CONFIG_IDUMP
@@ -28,7 +33,11 @@
 #define CONFIG_LARGE_IO_DIRECT(x)	1
 /* One memory bank */
 #define CONFIG_BANKS	1
-#define TICKSPERSEC 50		/* Ticks per second - NTSC 60 ? FIXME */
+#ifdef CONFIG_PAL
+#define TICKSPERSEC 50		/* Ticks per second - PAL 50  */
+#else
+#define TICKSPERSEC 60		/* Ticks per second - NTSC 60  */
+#endif
 #define PROGBASE    0x8800	/* also data base */
 #define PROGLOAD    0x8800	/* also data base */
 #define PROGTOP     0xFFFF	/* Top of program */
@@ -77,7 +86,6 @@ extern uint16_t swap_dev;
 /* Console */
 #define CONFIG_VT
 
-/* TODO: 32 x 24 if hires available */
 #define VT_WIDTH	32
 #define VT_HEIGHT	vtrows
 #define VT_RIGHT	31
@@ -87,6 +95,9 @@ extern uint8_t vtrows, vtbottom;
 
 extern unsigned char vt_mangle_6847(unsigned char c);
 #define VT_MAP_CHAR(x)	vt_mangle_6847(x)
+
+/* For banked bitmap mode if extended */
+#define CONFIG_FONT8X8
 
 /* Video as the console */
 #define BOOT_TTY (512 + 1)

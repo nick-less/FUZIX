@@ -8,6 +8,7 @@
 #include <vt.h>
 #include <tty.h>
 #include <graphics.h>
+#include <input.h>
 
 #undef  DEBUG			/* UNdefine to delete debug code sequences */
 
@@ -170,6 +171,15 @@ static volatile uint8_t *pia_col = (uint8_t *)0xFF02;
 /* Control */
 static volatile uint8_t *pia_ctrl = (uint8_t *)0xFF03;
 
+static uint8_t keyany(void)
+{
+	uint8_t x;
+	*pia_col = 0x00;
+	x = ~*pia_row;
+	*pia_col = 0xFF;
+	return x;
+}
+
 static void keyproc(void)
 {
 	int i;
@@ -185,8 +195,13 @@ static void keyproc(void)
 			int m = 1;
 			for (n = 0; n < 7; n++) {
 				if ((key & m) && (keymap[i] & m)) {
-					if (!(shiftmask[i] & m))
+					if (!(shiftmask[i] & m)) {
+						if (keyboard_grab == 3) {
+							queue_input(KEYPRESS_UP);
+							queue_input(keyboard[i][n]);
+						}
 						keysdown--;
+					}
 				}
 				if ((key & m) && !(keymap[i] & m)) {
 					if (!(shiftmask[i] & m)) {
@@ -232,37 +247,75 @@ uint8_t shiftkeyboard[8][7] = {
 
 static void keydecode(void)
 {
+	uint8_t m = 0;
 	uint8_t c;
 
-	if (keymap[7] & 64)	/* shift */
+	if (keymap[7] & 64) {	/* shift */
 		c = shiftkeyboard[keybyte][keybit];
-	else
+		m = KEYPRESS_SHIFT;
+	} else
 		c = keyboard[keybyte][keybit];
 	if (keymap[1] & 64) {	/* control */
+		m |= KEYPRESS_CTRL;
 		if (c > 31 && c < 127)
 			c &= 31;
 	}
-	tty_inproc(1, c);
+	if (c) {
+		switch(keyboard_grab) {
+		case 0:
+			tty_inproc(1, c);
+		case 1:
+			if (!input_match_meta(c)) {
+				vt_inproc(1, c);
+				break;
+			}
+			/* Fall through */
+		case 2:
+			queue_input(KEYPRESS_DOWN);
+			queue_input(c);
+			break;
+		case 3:
+			/* Queue an event giving the base key (unshifted)
+			   and the state of shift/ctrl/alt */
+			queue_input(KEYPRESS_DOWN | m);
+			queue_input(keyboard[keybyte][keybit]);
+			break;
+		}
+	}
 }
+
+uint8_t sys_hz;
+static uint8_t vblank_wait;
 
 void plt_interrupt(void)
 {
+	static uint8_t tick;
 	uint8_t i = *pia_ctrl;
 	if (i & 0x80) {
-		*pia_col;
-		newkey = 0;
-		keyproc();
-		if (keysdown && keysdown < 3) {
-			if (newkey) {
-				keydecode();
-				kbd_timer = keyrepeat.first;
-			} else if (! --kbd_timer) {
-				keydecode();
-				kbd_timer = keyrepeat.continual;
+		if (vblank_wait)
+			wakeup(&vblank_wait);
+		/* Do a single keyboard scan of all lines first if we have no key down> This makes
+		   the usual case much faster and saves precious interrupt time clocks */
+		if (keysdown || keyany()) {
+			*pia_col;
+			newkey = 0;
+			keyproc();
+			if (keysdown && keysdown < 3) {
+				if (newkey) {
+					keydecode();
+					kbd_timer = keyrepeat.first;
+				} else if (! --kbd_timer) {
+					keydecode();
+					kbd_timer = keyrepeat.continual;
+				}
 			}
 		}
 //                fd_timer_tick();
-		timer_interrupt();
+		tick++;
+		if (tick == sys_hz) {
+			tick = 0;
+			timer_interrupt();
+		}
 	}
 }
 
@@ -379,12 +432,14 @@ int gfx_ioctl(uint_fast8_t minor, uarg_t arg, char *ptr)
 		return 0;
 	}
 	case GFXIOC_WAITVB:
-		/* Our system clock is our vblank, use the standard timeout
-		   to pause for one clock */
-		udata.u_ptab->p_timeout = 2;
-		/* FIXME: race */
-		ptimer_insert();
-		psleep(NULL);
+		vblank_wait++;
+		psleep(&vblank_wait);
+		vblank_wait--;
+		chksigs();
+		if (udata.u_cursig) {
+			udata.u_error = EINTR;
+				return -1;
+		}
 		return 0;
 	}
 	return -1;

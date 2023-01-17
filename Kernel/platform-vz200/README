@@ -1,12 +1,13 @@
 Lazer VZ200 with 128K + SD card
 
 Memory map:
-0000-3FFF	ROM (fixed)	[there is a mod to use this as RAM]
+0000-3FFF	ROM (fixed)
 4000-67FF	Populated by one of two banks from SD card SRAM
 6800-6FFF	I/O latches and keyboard
 7000-77FF	Video RAM (may be paged on modded machines). Only low
 		512 used in normal text mode. Contended access causes display
-		noise.
+		noise. If the graphics mods are fitted then it's an 8K RAM banked
+		2K x 4 banks
 7800-8FFF	Onboard memory (not paged)
 9000-FFFF	Two SRAM banks off 128K card
 
@@ -15,23 +16,25 @@ Kernel
 7000-71FF	Video
 7200-77FF	Video space (starts as part of discard)
 7800-87FF	Common (only discard overlaps non text video)
-9000-FEFF	Kernel main (ideally 9000-FEFFF so can get bigger user space)
-FF00-FFFF	IM2 hack
+9000-FFFF	Kernel main (ideally 9000-FFFF so can get bigger user space)
 
 User
-8000-FFFF	User space
-7000-71FF	Video
+8800-FFFF	User space
+7000-71FF	Video	(7000-77FF after boot)
 
-TODO: Finish loader, and start debug
-
-Video
+TODO:
+-	Looks like there is a late reference somewhere into discard/font space we
+	need to find and fix (corrupted "=" in font)
+-	Optimise the SD read/write by unrolling by 7 (for 511 iterations) so we
+	can also overlap the djnz with an out/in cycle
+-	Tune as best we can for avoiding video flicker
+-	Graphic modes in devgfx
 
 The floppy interface is not supported. This shouldn't matter as the floppies
 are weird, incredibly slow and the floppy DOS will clash with the SD.
 
 Interrupts:
-The system ROM jumps to 0x787D. This is smack in the middle of our common space
-so we will need to do some magic around the system variables spot.
+The system ROM jumps to 0x787D. We juggle our discard and common space to cope
 
 Memory:
 
@@ -44,6 +47,9 @@ COMMON must end before 8800 (start of user)
 The two banked code segments must fit between 4000 and 6AFF
 The main code segment must fit between 9000 and FFFF
 
+We could switch to a LEVEL_0 build to get a bit more space back but right now it
+just about fits
+
 In order to get interrupts sane we disable interrupts on boot and keep them off
 until user space has started, at which point we blow away discard which leaves
 7800-787F free, along with the rest of video and probably some more above 7800 we
@@ -52,8 +58,7 @@ except that we undo the ROM behaviour and jump to our code so we can pre-empt pr
 and so on.
 
 Post boot all the video space is free. So for a normal machine the usual video modes
-are available. If we do a variant for banked video setups then this ought to work too
-as we can do all our boot time games, but we can also use the upper 2K of the 8K video
-RAM to hold a font and maybe some simple renders to use full text mode.
+are available. For banked video we switch to 256x192 and hide the font in the final
+2K bank the 6847 never sees.
 
 Flicker may be a big problem though.

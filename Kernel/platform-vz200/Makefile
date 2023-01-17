@@ -1,8 +1,8 @@
 ASRCS = crt0.s tricks.s commonmem.s vz200.s video.s
-CSRCS = devices.c main.c devtty.c sd.c
+CSRCS = devices.c main.c devtty.c sd.c devlpr.c
 DISCARD_CSRCS = discard.c
-DISCARD_DSRCS = ../dev/tinysd_discard.c
-DSRCS = ../dev/tinysd.c
+DISCARD_DSRCS = ../dev/tinydisk_discard.c
+DSRCS = ../dev/tinydisk.c ../dev/tinysd.c
 DASRCS =
 NSRCS = 
 
@@ -54,10 +54,12 @@ image: booter boot bootblock
 	# Bank 1 0x4000 for 10K
 	# Bank 0 0x9000 for 28K
 	# Common 0x7200 for 5.5K
+	# Font packed on the end for machines with the high res mod
 	dd if=../bank1.bin of=fuzix.boot bs=512 skip=32 count=20
 	dd if=../bank2.bin of=fuzix.boot bs=512 skip=32 seek=20 count=20
 	dd if=../common.bin of=fuzix.boot bs=512 skip=72 seek=40 count=56
 	dd if=../common.bin of=fuzix.boot bs=512 skip=57 seek=96 count=11
+	dd if=../bank3.bin of=fuzix.boot bs=512 skip=56 seek=107 count=4
 
 booter:
 	sdasz80 -o booter.s
@@ -84,15 +86,15 @@ IMAGES = $(FUZIX_ROOT)/Images/$(TARGET)
 
 diskimage: image
 	# Make a blank disk image with partition
-	dd if=$(FUZIX_ROOT)/Standalone/filesystem-src/parttab.40M of=$(IMAGES)/disk.img bs=40017920 conv=sync
+	dd if=$(FUZIX_ROOT)/Standalone/filesystem-src/parttab.20M of=$(IMAGES)/disk.img bs=20152320 conv=sync
 	# Add the file system
-	dd if=$(IMAGES)/filesys.img of=$(IMAGES)/disk.img bs=512 seek=2048 conv=notrunc
+	dd if=$(IMAGES)/filesys8.img of=$(IMAGES)/disk.img bs=512 seek=2048 conv=notrunc
 	# Add the kernel extra blocks
 	dd if=fuzix.boot of=$(IMAGES)/disk.img bs=512 seek=1 conv=notrunc
 	# Add the boot block at the start
 	dd if=bootblock.bin bs=1 skip=34816 count=384 of=$(IMAGES)/disk.img conv=notrunc
 	# Make an emulator image of it
-	cat $(FUZIX_ROOT)/Standalone/filesystem-src/idehdr.40M $(IMAGES)/disk.img > $(IMAGES)/emu-ide.img
+	cat $(FUZIX_ROOT)/Standalone/filesystem-src/idehdr.20M $(IMAGES)/disk.img > $(IMAGES)/emu-ide.img
 	# Loader
 	cp booter.vz $(IMAGES)/booter.vz
 	cp sdboot.rom $(IMAGES)/sdboot.rom

@@ -2,22 +2,13 @@
 #include <kdata.h>
 #include <printf.h>
 #include <timer.h>
-#include "mini_ide.h"
+#include <tinyide.h>
+#include <plt_ide.h>
 
-#ifdef CONFIG_WITH_IDE
-
-#define data	((volatile uint8_t *)0xFF50)
-#define error	((volatile uint8_t *)0xFF51)
-#define count	((volatile uint8_t *)0xFF52)
-#define sec	((volatile uint8_t *)0xFF53)
-#define cyll	((volatile uint8_t *)0xFF54)
-#define cylh	((volatile uint8_t *)0xFF55)
-#define devh	((volatile uint8_t *)0xFF56)
-#define status	((volatile uint8_t *)0xFF57)
-#define cmd	((volatile uint8_t *)0xFF57)
-#define datal	((volatile uint8_t *)0xFF58)
+#ifdef CONFIG_TD_IDE
 
 static timer_t giveup;
+static uint8_t ide_present;
 
 static int ide_wait_op(uint8_t mask, uint8_t val)
 {
@@ -44,7 +35,6 @@ static int ide_wait_drq(void)
 {
 	return ide_wait_op(0x08, 0x08);
 }
-
 
 static void ide_identify(int dev, uint8_t *buf)
 {
@@ -100,5 +90,9 @@ void ide_probe(void)
 	if (ide_present)
 		ide_identify(1, buf);
 	tmpfree(buf);
+	if (ide_present & 1)
+		ide_master = td_register(ide_xfer, 1);
+	if (ide_present & 2)
+		ide_slave = td_register(ide_xfer, 1);
 }
 #endif

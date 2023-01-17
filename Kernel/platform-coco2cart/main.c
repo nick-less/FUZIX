@@ -4,21 +4,17 @@
 #include <printf.h>
 #include <device.h>
 #include <devtty.h>
-#include <carts.h>
-#include <blkdev.h>
 
 uint8_t membanks;
 uint8_t system_id;
-uint16_t swap_dev;
+uint16_t swap_dev = 0xFFFF;
 struct blkbuf *bufpool_end = bufpool + NBUFS;
+/* We start in text 32,16 and change to 32x24 after boot */
+uint8_t vid_h = 16;
+uint8_t vid_b = 15;
 
 void plt_idle(void)
 {
-}
-
-uint8_t plt_param(char *p)
-{
-	return 0;
 }
 
 void do_beep(void)
@@ -27,18 +23,7 @@ void do_beep(void)
 
 void plt_discard(void)
 {
-	extern uint8_t discard_size;
-	bufptr bp = bufpool_end;
-
-	kprintf("%d buffers reclaimed from discard\n", discard_size);
-
-	bufpool_end += discard_size;	/* Reclaim the discard space */
-
-	memset(bp, 0, discard_size * sizeof(struct blkbuf));
-	/* discard_size is in discard so it dies here */
-	for (bp = bufpool + NBUFS; bp < bufpool_end; ++bp) {
-		bp->bf_dev = NO_DEVICE;
-		bp->bf_busy = BF_FREE;
-	}
+	vid256x192();
+	kputs("\033Y  \033J");
 }
 
