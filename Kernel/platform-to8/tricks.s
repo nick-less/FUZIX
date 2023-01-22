@@ -1,5 +1,9 @@
 ;
-;	6809 version
+;	Bank switching for Thompson TO8 and TO9+
+;
+;
+;	TODO: parent first mode would be a win due to the copier cost
+;	TODO: assumes TO8/TO9+ mode
 ;
         .module tricks
 
@@ -11,7 +15,6 @@
         .globl _inint
         .globl map_kernel
         .globl map_process
-        .globl map_process_a
         .globl map_process_always
         .globl copybank
 	.globl _nready
@@ -55,13 +58,6 @@ _plt_switchout:
 	; Stash the uarea into process memory bank
 	jsr map_process_always
 
-	ldx #_udata
-	ldy #U_DATA_STASH
-stash:	ldd ,x++
-	std ,y++
-	cmpx #_udata+U_DATA__TOTALSIZE
-	bne stash
-
 	; get process table in
 	jsr map_kernel
 
@@ -83,11 +79,11 @@ _switchin:
 
 	stx newpp
 	; get process table
-	lda P_TAB__P_PAGE_OFFSET+1,x		; LSB of 16-bit page no
+	lda P_TAB__P_PAGE_OFFSET+1,x		; Page of process we are switching in as
 
 	; check if we are switching to the same process
 	cmpa U_DATA__U_PAGE+1
-	beq nostash
+	beq no_work
 
 	; process was swapped out?
 	cmpa #0
@@ -97,23 +93,46 @@ _switchin:
 	lda P_TAB__P_PAGE_OFFSET+1,x
 
 not_swapped:
-	jsr map_process_a
-	
-	; fetch uarea from process memory
-	ldx #U_DATA_STASH
-	ldy #_udata
-stashb	ldd ,x++
-	std ,y++
-	cmpx #U_DATA_STASH+U_DATA__TOTALSIZE
-	bne stashb
+	; This isn't quite as simple as usual. We've got two blocks of memory
+	; and one of them we have to copy in and out of
 
-	; we have now new stacks so get new stack pointer before any jsr
+	ldb _cur6		; current bank 6xxx
+	beq bankclear		; image in the space may be dead
+
+bankout:
+	stb <$E5		; set bank for A000-DFFF (assumes TO8 mapping)
+	pshs x,y
+	ldx #$6100		; copy all but the monitor vars (includes udata)
+	ldy #$A100
+	ldd ,x++
+	std ,y++
+	cmpy #$E000		; copy the entire bank out
+	bne bankout
+
+bankclear:
+	; Now it gets trickier. We are copying in - but over our live stack!
+	; IRQ and FIRQ must be off ! FIXME- FIRQ mask above...
+	puls x,y
+bankin:
+	lda P_TAB__P_PAGE_OFFSET+1,x
+	sta _cur6		; remember the page that is actually now resident
+	sta <$E5		; map it at A000-DFFF for copying
+	ldx #$A100
+	ldy #$6100
+	ldd ,x++
+	std ,y++
+	cmpy #$9FFF
+	bne bankin
+
+no_work:
 	lds U_DATA__U_SP
+	; Ok now in the right spot on the child stack
+	; At this point our upper 16K is wrong, but we will set it back to
+	; kernel anyway in a moment
 
 	; get back kernel page so that we see process table
 	jsr map_kernel
 
-nostash:
 	ldx newpp
         ; check u_data->u_ptab matches what we wanted
 	cmpx U_DATA__U_PTAB
@@ -208,26 +227,42 @@ _dofork:
 	puls y,u,pc
 
 fork_copy:
-; copy the process memory to the new bank and stash parent uarea to old bank
-	ldx fork_proc_ptr
-	ldb P_TAB__P_PAGE_OFFSET+1,x	; new bank
-	lda U_DATA__U_PAGE+1		; old bank
-	ldx #PROGBASE
-	ldu U_DATA__U_BREAK		; top of data
-	jsr copybank			; preserves A,B, clobbers X,U
-	ldx U_DATA__U_SYSCALL_SP
-	ldu U_DATA__U_TOP		; top of process memory
-	jsr copybank
+; Unoptimized - we don't look at U_BREAK and other stuff
+; X is our new process (also in fork_proc_ptr)
+;
+	ldb P_TAB__P_PAGE_OFFSET+1,x	; child page
+	stb _cur6			; child is now deemed to own cur6
+	ldb U_DATA__U_PAGE+1		; parent low page
+	stb <$E5			; make it appear at A000
 
-; stash parent uarea (including kernel stack)
-	jsr map_process_a
-	ldx #_udata
-	ldu #U_DATA_STASH
-stashf	ldd ,x++
-	std ,u++
-	cmpx #_udata+U_DATA__TOTALSIZE
-	bne stashf
-	jsr map_kernel
-	; --- we are now on the stack copy, parent stack is locked away ---
-	rts                     ; this stack is copied so safe to return on
+	ldx #$6100
+	ldy #$A100
+save_low:				; copy the low 16K of user
+	ldd ,x++			; stack etc into the parent
+	std ,x++			; copy
+	cmpx #$A000
+	bne save_low
 
+	; we are in common so we can steal 0000-3FFF *if we are careful* -
+	; review the IRQ handlers! TODO. This won't work on a TO9 as we'll
+	; only be able to land some pages there
+	ldb _cur6
+	incb
+	stb <$E5			; map the child properly into A000-DFFF
+	ldb U_DATA__U_PAGE+1
+	incb
+	orb #$60			; RAM in wndow, writeable
+	stb <$E6			; map the low 16K to the parent upper block
+
+	ldx #$0000
+	ldy #$A000
+save_hi:				; copy the low 16K of user
+	ldd ,x++			; stack etc into the parent
+	std ,x++			; copy
+	cmpx #$4000
+	bne save_hi
+	
+	jmp map_kernel			; put the memory map back sane
+
+_cur6:
+	.byte 0

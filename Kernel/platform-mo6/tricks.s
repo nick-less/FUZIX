@@ -1,9 +1,10 @@
 ;
-;	6809 version
+;	TODO: udata needs to be in common space so swap needs to be smarter
+;	about split udata
 ;
         .module tricks
 
-	#imported
+	# imported
         .globl _makeproc
         .globl _chksigs
         .globl _getproc
@@ -16,7 +17,6 @@
         .globl copybank
 	.globl _nready
 	.globl _plt_idle
-	.globl _udata
 
 	# exported
         .globl _plt_switchout
@@ -33,15 +33,12 @@
 _ramtop:
 	.dw 0
 
-newpp   .dw 0
-
 	.area .common
 
 ; Switchout switches out the current process, finds another that is READY,
 ; possibly the same process, and switches it in.  When a process is
 ; restarted after calling switchout, it thinks it has just returned
 ; from switchout().
-;
 _plt_switchout:
 	orcc #0x10		; irq off
 
@@ -52,30 +49,19 @@ _plt_switchout:
 	pshs d,y,u
 	sts U_DATA__U_SP	; this is where the SP is restored in _switchin
 
-	; Stash the uarea into process memory bank
-	jsr map_process_always
-
-	ldx #_udata
-	ldy #U_DATA_STASH
-stash:	ldd ,x++
-	std ,y++
-	cmpx #_udata+U_DATA__TOTALSIZE
-	bne stash
-
-	; get process table in
-	jsr map_kernel
-
         ; find another (or same) process to run, returned in X
         jsr _getproc
         jsr _switchin
         ; we should never get here
         jsr _plt_monitor
 
-badswitchmsg: .ascii "_switchin: FAIL"
-            .db 13
-	    .db 10
-	    .db 0
+badswitchmsg:
+	.ascii "_switchin: FAIL"
+        .db 13
+	.db 10
+	.db 0
 
+newpp   .dw 0
 
 ; new process pointer is in X
 _switchin:
@@ -85,11 +71,6 @@ _switchin:
 	; get process table
 	lda P_TAB__P_PAGE_OFFSET+1,x		; LSB of 16-bit page no
 
-	; check if we are switching to the same process
-	cmpa U_DATA__U_PAGE+1
-	beq nostash
-
-	; process was swapped out?
 	cmpa #0
 	bne not_swapped
 	jsr _swapper		; void swapper(ptptr p)
@@ -97,23 +78,12 @@ _switchin:
 	lda P_TAB__P_PAGE_OFFSET+1,x
 
 not_swapped:
-	jsr map_process_a
-	
-	; fetch uarea from process memory
-	ldx #U_DATA_STASH
-	ldy #_udata
-stashb	ldd ,x++
-	std ,y++
-	cmpx #U_DATA_STASH+U_DATA__TOTALSIZE
-	bne stashb
-
 	; we have now new stacks so get new stack pointer before any jsr
 	lds U_DATA__U_SP
 
 	; get back kernel page so that we see process table
 	jsr map_kernel
 
-nostash:
 	ldx newpp
         ; check u_data->u_ptab matches what we wanted
 	cmpx U_DATA__U_PTAB
@@ -180,8 +150,10 @@ _dofork:
         ; now we're in a safe state for _switchin to return in the parent
 	; process.
 
-	jsr fork_copy			; copy process memory to new bank
-					; and save parents uarea
+	ldx U_DATA__U_PTAB
+	jsr _swapout
+	cmpd #0
+	bne forked_up
 
 	; We are now in the kernel child context
 
@@ -207,27 +179,6 @@ _dofork:
 	; if it had done a switchout().
 	puls y,u,pc
 
-fork_copy:
-; copy the process memory to the new bank and stash parent uarea to old bank
-	ldx fork_proc_ptr
-	ldb P_TAB__P_PAGE_OFFSET+1,x	; new bank
-	lda U_DATA__U_PAGE+1		; old bank
-	ldx #PROGBASE
-	ldu U_DATA__U_BREAK		; top of data
-	jsr copybank			; preserves A,B, clobbers X,U
-	ldx U_DATA__U_SYSCALL_SP
-	ldu U_DATA__U_TOP		; top of process memory
-	jsr copybank
-
-; stash parent uarea (including kernel stack)
-	jsr map_process_a
-	ldx #_udata
-	ldu #U_DATA_STASH
-stashf	ldd ,x++
-	std ,u++
-	cmpx #_udata+U_DATA__TOTALSIZE
-	bne stashf
-	jsr map_kernel
-	; --- we are now on the stack copy, parent stack is locked away ---
-	rts                     ; this stack is copied so safe to return on
-
+forked_up:	; d is already -1
+	puls y,u,pc
+	rts
