@@ -1,17 +1,22 @@
 	;
-	; TO8/TO8D/T09+ systems
+	; TO9 system routines.
+	;
+	; Very similar to the TO8 except that the banking is a bit messier
+	; and only cartridge space can go in the cartridge area
+	;
+	; Not yet handled - the extended 64K bank option
 	;
 
-	.module to8
+	.module to9
 
 	; exported
 	.globl map_kernel
 	.globl map_video
 	.globl map_process
 	.globl map_process_always
+	.globl map_for_swap
 	.globl map_save
 	.globl map_restore
-	.globl map_for_swap
         .globl init_early
         .globl init_hardware
         .globl _program_vectors
@@ -46,18 +51,18 @@ init_early:
 	lda	#$24			; video from colour plane 40 col mono
 	sta	$E7DC
 	lda	#0
-	sta	$E7DD			; video bank 0, black border
+	sta	$E7DD			; black border
 	rts
 
 init_hardware:
-	ldd	#512			; for now - need to size properly
+	ldd	#192			; for now - need to size properly
 	std	_ramsize
-	ldd	#512-40			; Kernel has 2,4 and half of 0
-	std	_procmem		; will be 2,3,4 eventually
+	ldd	#192-48			; Kernel has 2,4 and half of 0
+	std	_procmem		; 
 	ldd	<$CF			; system font pointer
 	subd	#0x00F8			; back 256 as starts at 32 and back
 	std	_fontbase		; 8 because it is upside down
-	jsr	video_init		; see the video code
+	jsr	video_init
 	ldd	#unix_syscall_entry	; Hook SWI
 	std	<$2F
 	rts
@@ -102,21 +107,32 @@ _program_vectors:
 	; TODO set 2064 to JMP to our irq in setup code
 	rts
 
+	; TODO
+map_for_swap:
+	rts
+
 map_kernel:
-	pshs	d
+	pshs	d,cc
 map_kernel_1:
 	; This is overkill somewhat but we do neeed to set the video bank
-	; for irq cases interrupting video writes, ditto 0000-3FFF ?
-	ldd	#0x0462
-	std	kmap
-	std	$E7E5		;	set the A000-DFFF and 0000-3FFF bank
-	lda	$E7C3		;	to 4 and 2 (writeable) respectively
+	; for irq cases interrupting video writes.
+	; TODO: optimize
+	orcc	#$10
+	ldb	$E7CB
+	andb	#0xFB
+	stb	$E7CB
+	lda	#0x1F
+	sta	kmap
+	sta	$E7C9		;	set the A000-DFFF bank
+	orb	#$04
+	stb	$E7CB
+	lda	$E7C3
 	anda	#$FE
 	tfr	a,b
 	anda	#$01
 	sta	kmap+2
 	stb	$E7C3		;	Ensure kernel half of bank 0 is mapped
-	puls	d,pc
+	puls	d,cc,pc
 
 map_video:
 	pshs	a
@@ -126,8 +142,8 @@ map_video:
 	ora	#$01
 	sta	$E7C3
 	puls	a,pc
-
-	.area .commondata
+	
+	.area	.commondata
 kmap:
 	.byte	0		; 	A000-DFFF
 	.byte	0		;	0000-3FFF
@@ -139,14 +155,20 @@ savemap:
 
 	.area .common
 map_process_always
-	pshs	a
+	pshs	d,cc
 	;	Set the upper page. The low 16K is kernel, the other chunk
-	;	is fixed for now until we tackle video.
-	lda	U_DATA__U_PAGE+1
+	;	is fixed.
+	lda	U_DATA__U_PAGE
+	orcc	#$10
+	ldb	$E7CB
+	andb	#0xFB
+	stb	$E7CB
 	sta	kmap
-	sta	$E7E5		;	Set A000-DFFF and video bank. Don't
+	sta	$E7C9		;	Set A000-DFFF and video bank. Don't
 				;	touch the video 8K mapping
-	puls	a,pc
+	orb	#$04
+	stb	$E7CB
+	puls	d,cc,pc
 
 map_save:
 	pshs	d
@@ -157,20 +179,20 @@ map_save:
 	bra	map_kernel_1
 
 map_restore:
-	pshs	d
+	pshs	d,cc
 	ldd	savemap
 	std	kmap
-	std	$E7E5
+	ldb	$E7CB
+	andb	#0xFB
+	stb	$E7CB
+	sta	$E7C9
+	orb	#$04
+	stb	$E7CB
 	lda	$E7C3
 	anda	#$FE
 	ora	kmap+2
 	sta	$E7C3
-	puls	d,pc
-
-map_for_swap:
-	; TODO
-	rts
-
+	puls	d,cc,pc
 
 	.area .common
 outchar:
@@ -230,3 +252,4 @@ flop_good
 	; ensure map is correct
 	tfr	d,x
 	jmp	map_kernel
+
