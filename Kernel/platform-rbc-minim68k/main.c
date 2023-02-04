@@ -2,8 +2,8 @@
 #include <timer.h>
 #include <kdata.h>
 #include <printf.h>
+#include <tty.h>
 #include <devtty.h>
-#include <blkdev.h>
 
 uint16_t swap_dev = 0xFFFF;
 
@@ -50,6 +50,8 @@ void pagemap_init(void)
 	kprintf("Motorola 680%s%d processor detected.\n",
 		sysinfo.cpu[1]>9?"":"0",sysinfo.cpu[1]);
 	enable_icache();
+	display_uarts();
+	ds1302_init();
 }
 
 /* Udata and kernel stacks */
@@ -66,7 +68,7 @@ void install_vdso(void)
 
 uint8_t plt_udata_set(ptptr p)
 {
-	p->p_udata = &udata_block[p - ptab];
+	p->p_udata = &udata_block[p - ptab].u_d;
 	return 0;
 }
 
@@ -90,30 +92,9 @@ void plt_interrupt(void)
 
 }
 
-unsigned long long plt_arith(uint32_t days, uint32_t sec)
+/* Early initialization C hook */
+void c_init_hardware(void)
 {
-	return days*86400LL + sec;
-}
-
-void plt_daytime_setup(time_t *tm)
-{
-/*  25202 = Julian day 1/1/1970 minus Julian day 1/1/1901     */
-/*  This fudge factor converts from BIOS time to Fuzix epoch  */
-/*  fudge factor of 3 on time accounts for start-up delay in Fuzix */
-
-__asm__ (
-	" move.w #20,%d0;"
-	" movq.l #1,%d1;"
-	" trap   #8;"
-	" sub.l  #25202,%d0;"
-	" addq.l #3,%d1;"
-	" move.l %d1,-(%sp);"
-	" move.l %d0,-(%sp);"
-	" bsr	plt_arith;"
-	" lea	8(%sp),%sp;"
-	
-	" move.l 4(%sp),%a0;"
-	" move.l %d1,(%a0);"
-	" move.l %d0,4(%a0);"
-	);
+	/* Register the MF/PIC UART to use as our console */
+	register_uart((void *)0xFFFF8048, &ns16x50_uart);
 }
