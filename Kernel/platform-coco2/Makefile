@@ -9,7 +9,7 @@ DSRCS = ../dev/tinyide.c ../dev/tinydisk.c
 
 DDSRCS = ../dev/tinydisk_discard.c ../dev/tinyide_discard.c
 
-ASRCS = crt0.s coco2.s ide.s
+ASRCS = crt0.s coco2.s ide.s video.s
 ASRCS += tricks.s commonmem.s
 
 COBJS = $(CSRCS:.c=$(BINEXT))
@@ -61,7 +61,8 @@ image: bootfuz.bin
 	../devio.o ../filesys.o ../process.o ../inode.o ../syscall_fs.o \
 	../syscall_proc.o ../syscall_other.o ../mm.o ../swap.o \
 	../tty.o ../devsys.o ../usermem.o ../syscall_fs2.o ../syscall_exec16.o \
-	devtty.o libc.o ../vt.o ../syscall_fs3.o ../syscall_exec.o ../blk512.o
+	devtty.o libc.o ../vt.o ../syscall_fs3.o ../syscall_exec.o ../blk512.o \
+	video.o
 	../tools/decb-image <../fuzix.bin fuzix.img
 	../tools/lw-checkmap ../fuzix.map
 	# Repack the high spot F0-FF where it wants it
@@ -83,5 +84,5 @@ diskimage:
 	# Write the rest of the images to the disks
 	dd if=fuzix.img of=$(IMAGES)/disk.img bs=512 seek=1 conv=notrunc
 	# Loader
-	cp bootfuz.bin bootfuz.decb $(IMAGES)
+	cp bootfuz.bin $(IMAGES)
 
