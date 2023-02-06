@@ -32,10 +32,11 @@
 	.globl	_scsi_idbits
 	.globl	_scsi_target
 	.globl	_scsi_status
-
+	.globl  _scsi_burst
 
 	.include "kernel.def"
 
+PDMA		.equ	1
 ;	FIXME: tune this
 TIMEOUT		.equ	0x8000
 
@@ -85,18 +86,34 @@ ncr5380_sel_wait:
 	in	a,(ncr_bus)
 	and	#B_BUSY
 	jr	z, ncr5380_sel_wait
-; Grab the bus ourselves.
-;	ld	a,#B_BUSY
-;	out	(ncr_cmd),a
+	; Drop SEL so we get to see a valid bus request
+	; from the target
+	xor	a
+	out	(ncr_cmd),a
 
 ncr5380_phase:
+	in	a,(ncr_bus)
+	and	#B_BUSY
+	jr	z, ncr5380_exit
+	; Clear mode register
+	xor	a
+	out	(ncr_mod),a
+	; Clear interrupt
+	in	a,(ncr_int)
+.ifne PDMA
+	; DMA on
+	ld	a,#6
+	out	(ncr_mod),a
+	ld	c,#ncr_dack
+.else
+	ld	c,#ncr_data
+.endif
 	in	a,(ncr_bus)
 	and	#B_MSG|B_CD|B_IO
 	rra
 	rra	; We now have the phase in bits 0-2 for testing
 	out	(ncr_tgt),a	; check for match
 
-	ld	c,#ncr_data
 
 	; Phase dispatcher
 	;
@@ -105,14 +122,16 @@ ncr5380_phase:
 	; the phase by supplying or reciving data.
 	;
 
+	ld	e,#1		; Default to non block burst
 	ld	hl,#_scsimsg	; Message buffer is used for phase 7
 	cp	#7		; Message in
+	jr	z, ncr5380_hdin
 	ld	hl,(_scsi_dbuf)	; Data buffer is used in data states
 	jr	z, ncr5380_hdin
 	or	a		; Data out
-	jr	z, ncr5380_hdout
+	jr	z, ncr5380_hdout_block
 	dec	a
-	jr	z, ncr5380_hdin	; Data in
+	jr	z, ncr5380_hdin_block	; Data in
 	ld	hl,#_scsicmd	; SCSI cmd block
 	dec	a
 	jr	z, ncr5380_hdout ; Command out
@@ -125,10 +144,75 @@ ncr5380_timeout:
 	ld	l,#1
 	ret
 
+.ifne PDMA
 ;
-;	TODO: we need PDMA versions of these
+;	PDMA mode
 ;
+	; Busy dropped
+
+ncr5380_exit:
+	xor	a
+	out	(ncr_cmd),a
+	out	(ncr_tgt),a
+	ld	l,a
+	ret
+
 	; Things are coming off the bus for us to store
+	; We try and keep this loop as tight as we can
+
+ncr5380_hdin_block:
+	ld	a,(_scsi_burst)
+	; Burst size for transfer. The available buffer must divide by this
+	ld	e,a
+ncr5380_hdin:
+	out	(ncr_dma_r),a	; Value is irrelevant
+	ld	d,#0x40
+ncr5380_hdin1:
+	in	a,(ncr_st)
+	ld	b,a
+	and	d		; Wait for REQ
+	jr	z, ncr5380_hdin2
+	ld	b,e
+	inir
+	jp	ncr5380_hdin
+ncr5380_hdin2:
+	bit	4,b
+	jr	z, ncr5380_hdin1
+	jp	ncr5380_phase
+
+	; Same idea other way around
+
+ncr5380_hdout_block:
+	ld	a,(_scsi_burst)
+	; Burst size for transfer. The available buffer must divide by this
+	ld	e,a
+ncr5380_hdout:
+	ld	a,#B_ABUS
+	out	(ncr_cmd),a
+	out	(ncr_dma_w),a
+	ld	d,#0x40
+ncr5380_hdout1:
+	in	a,(ncr_st)
+	ld	b,a
+	and	d		; Wait for REQ
+	jr	z, ncr5380_hdout2
+	ld	b,e
+	otir
+	jp	ncr5380_hdout1
+ncr5380_hdout2:
+	bit	4,b
+	jr	z, ncr5380_hdout1
+	jp	ncr5380_phase
+
+
+.else
+;
+;	PIO mode
+;
+
+	; Things are coming off the bus for us to store
+
+ncr5380_hdin_block:
 ncr5380_hdin:
 	in	a,(ncr_bus)
 	bit	5,a		; Wait for REQ
@@ -156,6 +240,7 @@ ncr5380_hdin1:
 	out	(ncr_cmd),a
 	jr	ncr5380_hdin
 
+ncr5380_hdout_block:
 ncr5380_hdout:
 	ld	a,#B_ABUS
 	out	(ncr_cmd),a
@@ -176,6 +261,8 @@ ncr5380_hdout1:
 	xor	a
 	out	(ncr_cmd),a
 	jr	ncr5380_hdout
+
+.endif
 
 ;
 ;	Perform a SCSI command. The caller loaded the command block
@@ -220,6 +307,8 @@ _scsi_idbits:		; shifted
 _scsi_target:		; shifted
 	.byte	0
 _scsimsg:
+	.byte	0
+_scsi_burst:
 	.byte	0
 _scsicmd:
 	.ds	16

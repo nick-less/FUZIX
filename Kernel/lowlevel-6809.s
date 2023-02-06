@@ -35,7 +35,6 @@
         .globl map_restore
 	.globl outchar
 	.globl _need_resched
-	.globl _inint
 	.globl _plt_interrupt
 
         ; exported symbols
@@ -195,7 +194,27 @@ _doexec:
 ;	poll ttys from it. The more logic we could move to common here the
 ;	better.
 ;
+
+
+;
+;	Called when interrupts have been re-enabled within the timer
+;	interrupt. We hand it to the platform re-interrupt handler. If
+;	none is expected then it can panic, or if the platform is clever
+;	it can do the needed work.
+;
+reinterrupt:
+	jsr _plt_reinterrupt
+	; Signals and other magic will happen when the first level of
+	; interrupt handling returns
+	rti
+
 interrupt_handler:
+	; If the platofmr interrupt code re-enabled interrupts then
+	; we are on the interrupt stack already and platform author
+	; is assumed to know what they are doing 8)
+	tst U_DATA__U_ININTERRUPT
+	bne reinterrupt
+
 	; Do not use the stack before the switch...
 	; FIXME: add profil support here (need to keep profil ptrs
 	; unbanked if so ?)
@@ -226,9 +245,6 @@ interrupt_handler:
 nofault:
 in_kernel:
         jsr map_kernel
-        ; set inint to true
-        lda #1
-        sta _inint
 
 	;
 	; If the kernel decides to task switch it will set
@@ -237,7 +253,6 @@ in_kernel:
 
         jsr _plt_interrupt
 
-        clr _inint
         ldx istack_switched_sp	; stack back
         clr U_DATA__U_ININTERRUPT
         lda U_DATA__U_INSYS
