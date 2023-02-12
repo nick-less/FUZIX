@@ -1,5 +1,5 @@
 /*
- *	ROM booted Fuzix
+ *	We are run from the boot ROM
  */
 		#include "../kernel-68000.def"
 
@@ -37,14 +37,14 @@ vectors:
 		long	e_unexpected
 		long	e_unexpected
 		; 24
-		long	e_spurious
-		long	interrupt
-		long	e_unexpected
-		long	e_unexpected
-		long	e_unexpected
-		long	e_unexpected
-		long	e_unexpected
-		long	e_unexpected
+		long	rc2014_vector
+		long	timer_tick
+		long	rc2014_vector
+		long	rc2014_vector
+		long	rc2014_vector
+		long	rc2014_vector
+		long	rc2014_vector
+		long	rc2014_vector
 		; 32 - TRAP #n
 		long	e_trap0
 		long	e_trap1
@@ -63,8 +63,13 @@ vectors:
 		long	e_trap14
 		long	e_trap15
 
+;
+;	We are mapped at 0x00000000 on entry. Out stack pointer is not valid
+;
 start:
 		or #$0700,sr
+		; Stack
+		move.l $0,a7
 		; TODO copy data from ROM backup
 		move.l #_etext,a0
 		move.l #_data,a1

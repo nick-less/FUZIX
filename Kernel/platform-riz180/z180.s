@@ -127,8 +127,10 @@ _copy_and_map_process:
 
 camp:
 	ld e,a		; Save the MMU value
+	dec e 		;  E000 to F000 shift
+	dec e
 
-	; Copy from BDL to CHL
+	; Copy from CDL to BHL
 
         out0 (DMA_DAR0L), l		; 0
         out0 (DMA_DAR0H), h
@@ -148,6 +150,7 @@ camp:
 
         ; finally reprogram the MMU to bring the new process common memory into context
         ; note this replaces the stack, but we just copied it over.
+
         out0 (MMU_CBR), e
         ret ; was jp map_kernel but we never change MMU_BBR
 
@@ -512,6 +515,8 @@ _swapout:
 	add hl,sp		; get the current SP into a register pair
 	ld sp,#swapinstack
 	in0 e,(MMU_CBR)		; save the old mapping
+	dec a			; allow for the 56K
+	dec a
 	out0 (MMU_CBR),a	; Swap the common to the victim
 	push hl			; Save old stack frame
 	push de			; Save old mapping
@@ -603,6 +608,8 @@ is_resident:
 	;
 	ld a, (hl)
         ; out0 (MMU_BBR), a -- WRS: leave the kernel mapped in
+	dec a		; Allow for the fact it's not a full 64K
+	dec a
         out0 (MMU_CBR), a
 
         ; sanity check: u_data->u_ptab matches what we wanted?
@@ -619,7 +626,7 @@ is_resident:
         ;; ; Fix the moved page pointers
         ;; ; Just do one byte as that is all we use on this platform
         ld a, P_TAB__P_PAGE_OFFSET(ix)
-        ld (U_DATA__U_PAGE), a
+        ld (_udata + U_DATA__U_PAGE), a
 
         ; runticks = 0
         ld hl, #0
@@ -662,7 +669,7 @@ map_kernel: ; map the kernel into the low 60K, leaves common memory unchanged
 .endif
 	ld a,#0xFD		; Split at D000 and F000
 	out0 (MMU_CBAR),a
-	ld a,#0x33		; Low 8KK of RAM appears at D000
+	ld a,#0x33		; Low 8K of RAM appears at D000
 	out0 (MMU_BBR),a
         pop af
         ret
@@ -693,11 +700,9 @@ map_for_swap:
         ld a, #'s'
         call outchar
 .endif
+	out0 (MMU_BBR),a	; the page is passed in A, so we just do an out0
 	ld a,#0xF0
 	out0 (MMU_CBAR),a
-	pop af
-	push af
-	out0 (MMU_BBR),a	; the page is passed in A, so we just do an out0
 .if DEBUGBANK
         call outcharhex
 	pop af
@@ -708,6 +713,8 @@ map_save_kernel:   ; save the current process/kernel mapping
         push af
         in0 a, (MMU_BBR)
         ld (map_store), a
+        in0 a, (MMU_CBAR)
+        ld (map_store + 1), a
 .if DEBUGBANK
         ld a, #'S'
         call outchar
@@ -725,12 +732,7 @@ map_restore: ; restore the saved process/kernel mapping
         ld a, #'-'
         call outchar
 .endif
-        ld a, (map_store)
-	cp #0x33
-	ld a,#0xFD
-	jr z, resreg
-	ld a, #0xF0
-resreg:
+        ld a, (map_store + 1)
 	out0 (MMU_CBAR),a
 	ld a, (map_store)
         out0 (MMU_BBR), a
@@ -741,7 +743,8 @@ resreg:
         ret
 
 map_store:  ; storage for map_save/map_restore
-        .db 0
+        .db 0	; BBR
+	.db 0	; CBAR
 
 .ifne CONFIG_SWAP
 	.area _COMMONMEM
