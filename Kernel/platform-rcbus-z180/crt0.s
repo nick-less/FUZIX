@@ -38,6 +38,10 @@
         .globl l__DATA
         .globl kstack_top
 
+	.globl _systype
+	.globl _syskhz
+	.globl _syscpu
+
 	.include "kernel.def"
         .include "../cpu-z180/z180.def"
 
@@ -51,10 +55,16 @@
 	;
         .area _CODE
 init:
+	; Get the ROM info off the stack before we flip banks about
+	pop bc			; B = ROMWBW ver C = platform
+	pop de			; DE = CPU seed in KHz
+	pop hl			; H - Z80 variant L = CPU speed in MHz
         di
 	ld a,#0xFE
 	out (0x0D),a
         ld sp, #kstack_top
+
+	exx
 
         ; move the common memory where it belongs    
         ld hl, #s__DATA
@@ -79,6 +89,14 @@ init:
 
 	ld a,#0xF8
 	out (0x0D),a
+
+	; We now have the ROM info to hand and have cleared stuff so it
+	; is safe to write these into memory
+
+	exx
+	ld (_systype), bc
+	ld (_syskhz), de
+	ld (_syscpu), hl
 
         ; Hardware setup
         call init_hardware

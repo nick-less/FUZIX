@@ -2,20 +2,21 @@
 #include <kdata.h>
 #include <printf.h>
 #include <devtty.h>
-#include <blkdev.h>
-#include <devide.h>
-#include <devsd.h>
+#include <tinyide.h>
+#include <tinysd.h>
 #include "config.h"
 #include <z180.h>
 #include <ds1302.h>
 #include <netdev.h>
-#include "sc126.h"
+#include "rcbus-z180.h"
 
 static uint8_t has_1mb;	/* additional 512K RAM located in U2 socket */
 
 void init_hardware_c(void)
 {
-	has_1mb = detect_1mb();
+	/* Check for SC126 1MB mod */
+	if (systype == 10)
+		has_1mb = detect_1mb();
 
 	if (has_1mb) {
 		ramsize = 1024;
@@ -46,7 +47,6 @@ void pagemap_init(void)
 	if (has_1mb)
 		for (i = 0x01; i < (512 >> 2); i += 0x10)
 			pagemap_add(i);
-
 	ds1302_init();
 	if (ds1302_present)
 		kputs("DS1302 detected at 0x0C.\n");
@@ -68,9 +68,11 @@ uint8_t plt_param(char *p)
 
 void device_init(void)
 {
-	devide_init();
-	devsd_init();
+	ide_probe();
+	if (systype == 10) {	/* Has SD glue */
+		sd_init();
 #ifdef CONFIG_NET
-	netdev_init();
+		netdev_init();
 #endif
+	}
 }

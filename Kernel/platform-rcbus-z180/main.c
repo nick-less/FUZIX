@@ -3,12 +3,19 @@
 #include <printf.h>
 #include <kmod.h>
 #include <devtty.h>
-#include "config.h"
+#include <tinysd.h>
+#include <rcbus-z180.h>
 #include <z180.h>
 
 uint16_t ramtop = PROGTOP;
 extern unsigned char irqvector;
 uint16_t swap_dev = 0xFFFF;
+
+/* From ROMWBW */
+uint16_t syscpu;
+uint16_t syskhz;
+uint8_t systype;
+uint8_t romver;
 
 uint16_t rtc_port = 0x0C;
 uint8_t rtc_shadow = 0xAF;
@@ -56,6 +63,11 @@ void z180_timer_interrupt(void)
 	a = TIME_TMDR0L;
 	a = TIME_TCR;
 	timer_interrupt();
+
+	/* No blinkenlights on the standard systems */
+	if (systype != 10)
+		return;
+
 	if (++lightct & 7)
 		return;
 	if (lightdir)
@@ -82,7 +94,9 @@ void plt_interrupt(void)
 	case Z180_INT_TIMER0:
 		z180_timer_interrupt();
 #ifdef CONFIG_NET_WIZNET
-		w5x00_poll();
+		/* We can't poll the Wiznet if the SD card is mid transaction */
+		if (tinysd_busy == 0)
+			w5x00_poll();
 #endif		
 		return;
 	case Z180_INT_ASCI0:

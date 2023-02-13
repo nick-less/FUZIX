@@ -13,9 +13,8 @@
 #include <stdbool.h>
 #include "config.h"
 #include <z180.h>
-#include <blkdev.h>
-#include <devsd.h>
-#include <sc126.h>
+#include <tinysd.h>
+#include <rcbus-z180.h>
 
 #define CSIO_CNTR_TE           (1<<4)   /* transmit enable */
 #define CSIO_CNTR_RE           (1<<5)   /* receive enable */
@@ -51,23 +50,20 @@ reverse_byte_a:
     byte; /* squelch compiler warning */
 }
 
-void sd_spi_clock(bool go_fast)
+void sd_spi_fast(void)
+{
+    CSIO_CNTR &= 0xf8; /* clear low three bits, gives fastest rate (clk/20) */
+}
+
+void sd_spi_slow(void)
 {
     unsigned char c;
 
     c = CSIO_CNTR & 0xf8; /* clear low three bits, gives fastest rate (clk/20) */
-    if(!go_fast)
-        c = c | 0x03;     /* set low two bits, clk/160 (can go down to clk/1280, see data sheet) */
+    c = c | 0x03;     /* set low two bits, clk/160 (can go down to clk/1280, see data sheet) */
     CSIO_CNTR = c;
 }
 
-void sd_spi_lower_cs(void)
-{
-    /* wait for idle */
-    while(CSIO_CNTR & (CSIO_CNTR_TE | CSIO_CNTR_RE));
-    /* Raise the bit we don't want - active low */
-    gpio_set(0x0C, 0x08 >> sd_drive);
-}
 
 void sd_spi_raise_cs(void)
 {
@@ -81,6 +77,12 @@ void spi_select_port(uint8_t port)
 {
     while(CSIO_CNTR & (CSIO_CNTR_TE | CSIO_CNTR_RE));
     gpio_set(0x0C, (~port & 3) << 2);
+}
+
+/* SD is on SPI 1 */
+void sd_spi_lower_cs(void)
+{
+    spi_select_port(1);
 }
 
 void sd_spi_transmit_byte(unsigned char byte)
@@ -131,9 +133,13 @@ COMMON_MEMORY
 /* WRS: measured byte transfer time as approx 5.66us with Z180 @ 36.864MHz,
    three times faster. Main change is to start the next receive operation 
    as soon as possible and overlap the loop housekeeping with the receive. */
-bool sd_spi_receive_sector(void) __naked
+bool sd_spi_receive_sector(uint8_t *addr) __naked
 {
     __asm
+        pop hl
+        pop de
+        push de
+        push hl
 waitrx: 
         in0 a, (_CSIO_CNTR)     ; wait for any current transmit or receive operation to complete
         tst a, #0x30
@@ -143,13 +149,12 @@ waitrx:
         ld h, a                 ; stash value for reuse later
 
         ; load parameters
-        ld a, (_blk_op+BLKPARAM_IS_USER_OFFSET) ; blkparam.is_user
-        ld de, (_blk_op+BLKPARAM_ADDR_OFFSET)   ; blkparam.addr
+        ld a, (_td_raw) 			; blkparam.is_user
         ld bc, #512                             ; sector size
 #ifdef SWAPDEV
         cp #2
         jr nz, not_swapin
-        ld a,(_blk_op+BLKPARAM_SWAP_PAGE)
+        ld a,(_td_page)
         call map_for_swap
         jr rxnextbyte
 not_swapin:
@@ -198,17 +203,20 @@ waitrx3:
     __endasm;
 }
 
-bool sd_spi_transmit_sector(void) __naked
+bool sd_spi_transmit_sector(uint8_t *addr) __naked
 {
     __asm
         ; load parameters
-        ld a, (_blk_op+BLKPARAM_IS_USER_OFFSET) ; blkparam.is_user
-        ld de, (_blk_op+BLKPARAM_ADDR_OFFSET)   ; blkparam.addr
+        pop hl
+        pop de
+        push de
+        push hl
+        ld a, (_td_raw) 			; blkparam.is_user
         ld hl, #512                             ; sector size
 #ifdef SWAPDEV
         cp #2
         jr nz, not_swapout
-        ld a,(_blk_op+BLKPARAM_SWAP_PAGE)
+        ld a,(_td_page)
         call map_for_swap
         jr gotransmit
 not_swapout:

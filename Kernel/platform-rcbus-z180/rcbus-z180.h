@@ -8,3 +8,8 @@ extern void spi_select_port(uint8_t n);
 
 #define spi_send	sd_spi_transmit_byte
 #define spi_recv	sd_spi_receive_byte
+
+extern uint16_t syscpu;
+extern uint16_t syskhz;
+extern uint8_t systype;
+extern uint8_t romver;

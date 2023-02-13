@@ -7,7 +7,7 @@
 
 #include <kernel.h>
 #include <kdata.h>
-#include <sc126.h>
+#include <rcbus-z180.h>
 #include <ds1302.h>
 #include <i2c.h>
 

@@ -28,7 +28,13 @@
 #define KERNTOP     0xF000  /* Kernel has lower 60KB */
 #define PROC_SIZE   64      /* Memory needed per process */
 
-#define CONFIG_IDE
+#define CONFIG_TD_NUM		4
+/* RC2014 style CF IDE */
+#define CONFIG_TD_IDE
+#define CONFIG_TINYIDE_SDCCPIO
+#define CONFIG_TINYIDE_8BIT
+/* SD via CSIO : Needs an additional GPIO pin so not on all boards. */
+#define CONFIG_TD_SD
 
 #define CONFIG_RTC
 #define CONFIG_RTC_FULL
@@ -43,17 +49,11 @@
 #define BOOTDEVICENAMES "hd#"
 
 #define CONFIG_DYNAMIC_BUFPOOL /* we expand bufpool to overwrite the _DISCARD segment at boot */
-#define NBUFS    4        /* Number of block buffers, keep in line with space reserved in mark4.s */
+#define NBUFS    4        /* Number of block buffers, keep in line with space reserved in rcbus-z180.s */
 #define NMOUNTS	 4	  /* Number of mounts at a time */
 
 /* Hardware parameters : internal hardware at 0xC0-0xFF */
 #define Z180_IO_BASE       0xC0
-
-#define MAX_BLKDEV 4	    /* 2 IDE drives, 2 SD drives */
-
-/* SD via CSIO : Needs an additional GPIO pin */
-#define CONFIG_SD
-#define SD_DRIVE_COUNT 1	/* Need to figure out how we deal with this */
 
 #define NUM_DEV_TTY	2
 /* UART0 as the console */
@@ -76,10 +76,10 @@ extern uint16_t swap_dev;
 
 /* WizNET based TCP/IP : currently you'll need to disable other stuff to
   fit the networking */
-#undef CONFIG_NET
-#undef CONFIG_NET_WIZNET
+#define CONFIG_NET
+#define CONFIG_NET_WIZNET
 #undef CONFIG_NET_W5200		/* WizNET 5200 */
-#undef CONFIG_NET_W5500	/* WizNET 5500 */
+#define CONFIG_NET_W5500	/* WizNET 5500 */
 
 /* I2C device */
 #define CONFIG_DEV_I2C

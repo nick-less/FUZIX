@@ -1,6 +1,6 @@
 #include <kernel.h>
-#include <sc126.h>
-#include <devsd.h>
+#include <rcbus-z180.h>
+#include <tinysd.h>
 /*
  *	Drive a WizNet 5200 or 5500 over SPI
  */
