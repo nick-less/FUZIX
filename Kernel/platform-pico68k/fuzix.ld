@@ -5,12 +5,11 @@ SEARCH_DIR(.)
 
 MEMORY
 {
-  rom (rx) : ORIGIN = 0x000000, LENGTH = 0x10000
-  ram (rwx) : ORIGIN = 0xC00000, LENGTH = 0x100000
+  ram (rwx) : ORIGIN = 0x010000, LENGTH = 0x020000
 }
 
 /*
- * System in ROM, data/bss in RAM
+ * stick everything in ram (of course)
  */
 SECTIONS
 {
@@ -55,7 +54,7 @@ SECTIONS
     . = ALIGN(0x4);
     _etext = .;
     *(.lit)
-  } > rom
+  } > ram
 
   .data :
   {
@@ -64,7 +63,7 @@ SECTIONS
     *(.shdata)
     *(.data .data.*)
     _edata = .;
-  } > ram AT >rom
+  } > ram
 
   .bss :
   {

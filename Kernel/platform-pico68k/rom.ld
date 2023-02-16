@@ -1,16 +1,15 @@
-STARTUP(crt0.o)
 OUTPUT_ARCH(m68k)
 
 SEARCH_DIR(.)
 
 MEMORY
 {
-  rom (rx) : ORIGIN = 0x000000, LENGTH = 0x10000
-  ram (rwx) : ORIGIN = 0xC00000, LENGTH = 0x100000
+  rom (rx) : ORIGIN = 0x00000, LENGTH = 0x02000
+  ram (rwx) : ORIGIN = 0x10000, LENGTH = 0x20000
 }
 
 /*
- * System in ROM, data/bss in RAM
+ * stick everything in ROM
  */
 SECTIONS
 {
