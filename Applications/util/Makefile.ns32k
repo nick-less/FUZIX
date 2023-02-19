@@ -1,4 +1,4 @@
-include $(FUZIX_ROOT)/Applications/rules.68000
+include $(FUZIX_ROOT)/Applications/rules.ns32k
 
 SRCSNS = \
 	basename.c \
@@ -108,15 +108,13 @@ SRCS  = \
 	write.c \
 	xargs.c
 
-SRCTC = tget.c \
+SRCTC = fleamacs.c \
+	tget.c \
         tchelp.c \
+	vile.c \
 	marksman.c
 
-# Until we sort out memory allocation better
-SRCTCBIG = vile.c fleamacs.c
-
 SKIPPED =
-
 
 OBJS = $(SRCS:.c=.o)
 OBJSNS = $(SRCSNS:.c=.o)
@@ -139,20 +137,16 @@ $(APPTCBIG): $(CRT0)
 $(APPCURSES): $(CRT0)
 
 $(APPS) $(APPSNS): %: %.o
-	$(LINKER) $^ -o $@.bin $(LINKER_OPT) $(LINKER_TAIL)
-	$(ELF2FUZIX) -o $@ $@.bin
+	$(LINKER) $^ -o $@ $(LINKER_OPT) $(LINKER_TAIL)
 
 $(APPTC): %: %.o
-	$(LINKER) $^ -o $@.bin $(LINKER_OPT) -ltermcap68000 $(LINKER_TAIL)
-	$(ELF2FUZIX) -o $@ $@.bin
+	$(LINKER) $^ -o $@ $(LINKER_OPT) -ltermcapns32k $(LINKER_TAIL)
 
 $(APPTCBIG): %: %.o
-	$(LINKER) $^ -o $@.bin $(LINKER_OPT) -ltermcap68000 $(LINKER_TAIL)
-	$(ELF2FUZIX) -s 66500 -o $@ $@.bin
+	$(LINKER) $^ -o $@ $(LINKER_OPT) -ltermcapns32k $(LINKER_TAIL)
 
 $(APPCURSES): %: %.o
-	$(LINKER) $^ -o $@.bin $(LINKER_OPT) -lcurses68000 -ltermcap68000 $(LINKER_TAIL)
-	$(ELF2FUZIX) -o $@ $@.bin
+	$(LINKER) $^ -o $@ $(LINKER_OPT) -lcursesns32k -ltermcapns32k $(LINKER_TAIL)
 
 size.report: $(APPS) $(APPSNS) $(APPTC)
 	ls -l $^ > $@

@@ -14,6 +14,7 @@
 	    .globl map_buffers
 	    .globl map_kernel
 	    .globl map_kernel_di
+	    .globl map_kernel_restore
 	    .globl map_process
 	    .globl map_process_di
 	    .globl map_process_a
@@ -42,7 +43,6 @@
 	    .globl outhl
 	    .globl null_handler
 	    .globl nmi_handler
-	    .globl _inint
 	    .globl kstack_top
 
 	    .globl s__COMMONMEM
@@ -145,7 +145,8 @@ init_hardware:
 	    ld l,#0xFF
 	    call _io_bank_set
 	    push hl
-	    ld hl,#0xBBE0	; MMU on S and U, no split I/D
+	    ld hl,#0xBBFF	; TODO: revise as we get going
+				; MMU on S and U, no split I/D
 				; We may want to consider MMU off in
 				; supervisor later on - is there a perf
 				; gain versus MMU on ??
@@ -250,6 +251,7 @@ _program_vectors:
 map_buffers:
 map_kernel:
 map_kernel_di:
+map_kernel_restore:
 	    push af
 	    xor a
 	    call map_process_a	; do all the logic in one place with
@@ -291,9 +293,10 @@ map_process_a:			; used by bankfork
 	    add hl,hl
 	    add hl,hl
 	    ld de,#frames	; Lazy - look it up it's only a hack for now
+	    add hl,de
 	    ld a,#0x10
-	    out (0x44),a	; pointer to 0x10 (system pages)
-	    ld bc,#0x0FF4
+	    out (0xF1),a	; PDR pointer to 0x10 (system pages)
+	    ld bc,#0x10F4	; 16 words to F4
 ;;	    otirw
             .db 0xED, 0x93
 	    pop hl
@@ -687,7 +690,7 @@ sig_or_die:
 	; Once we have proper supervisor/user we can just check the pushed
 	; status to see what to do. For now fudge it roughly.
 	push af
-	ld a,(_inint)
+	ld a,(_udata + U_DATA__U_ININTERRUPT)
 	or a
 	jr nz, diediedie
 	ld a,(_udata + U_DATA__U_INSYS)
