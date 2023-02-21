@@ -1,6 +1,6 @@
-package platform-dragon-nx32
+package platform-dragon-mooh
 
-disable-pkg platform-dragon-nx32
+disable-pkg platform-dragon-mooh
 
 # dw0 is also in fuzix-netd.pkg
 r /dev/dw0
