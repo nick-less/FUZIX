@@ -7,9 +7,9 @@
 	.globl ei
 	.globl irqrestore
 
-	.globl unix_syscall_entry
+	.globl common_syscall
 	.globl dispatch_process_signal
-	.globl interrupt_handler
+	.globl common_intr
 	.globl nmi_handler
 	.globl trap_handler
 	.globl doexec
@@ -27,7 +27,7 @@
 #include "kernel-hc11.def"
 
 
-	.section .common
+	.section .text
 
 di:
 	tpa		; return cc codes in D
@@ -54,7 +54,7 @@ swab:
 	rts
 
 
-	.section .common
+	.section .text
 
 outnewline:
 	ldab #0x0d
@@ -165,145 +165,65 @@ outd:
 ;	9-8	UserPC
 ;	etc for SWI
 ;
+;	In thunked mode we are on the thunk stack in common space and
+;	the data is passed by a bit of the common space. The common
+;	user side coe does all the work
+;
+;
 unix_syscall_entry:
-	tsx
-	sts udata+U_DATA__U_SYSCALL_SP
-	staa udata+U_DATA__U_CALLNO
-	bitb #0x80			; 68HC11 or 680X call
-	beq syscall_0x
-	; Sane argument order but odd stack layout
-	ldd 11,x
-	std udata+U_DATA__U_ARGN
-	ldd 15,x
-	std udata+U_DATA__U_ARGN+2
-	ldd 17,x
-	std udata+U_DATA__U_ARGN+4
-	ldd 19,x
-	bra syscall_main
-syscall_0x:
-	abx
-	ldd 9,x
-	std udata+U_DATA__U_ARGN
-	ldd 7,x
-	std udata+U_DATA__U_ARGN+2
-	ldd 5,x
-	std udata+U_DATA__U_ARGN+4
-	ldd 3,x
-syscall_main:
-	std udata+U_DATA__U_ARGN+6
-	ldaa #1
-	staa udata+U_DATA__U_INSYS	; we may want to use udata-> tricks ?
-	lds #kstack_top
-	jsr map_kernel_di		; no-op in pure banked
+	ldx	shared_sp	
+	stx	udata+U_DATA__U_SYSCALL_SP	; Save user SP for brk checks
+	pulx			; The only word on the shared stack is our
+				; return and we need to save it as it will
+				; be lost by the time we go back
+	ldaa	shared_syscall
+	staa	udata+U_DATA__U_CALLNO
+	; All the hard work is done by the platform wrapper before
+	; the call, so the argument marshalling for 680x v 68HC11
+	; is done for us
+	ldd	shared_argn
+	std	udata + U_DATA__U_ARGN
+	ldd	shared_argn1
+	std	udata + U_DATA__U_ARGN+2
+	ldd	shared_argn2
+	std	udata + U_DATA__U_ARGN+4
+	ldd	shared_argn3
+	std	udata + U_DATA__U_ARGN+6
+	ldaa	#1
+	staa	udata+U_DATA__U_INSYS	; we may want to use udata-> tricks ?
+	lds	#kstack_top
+	pshx				; save return ptr
 	cli
-	jsr unix_syscall
+	jsr	unix_syscall
 	sei
-	clr udata+U_DATA__U_INSYS
-	jsr map_process_always	; no-op in pure banked
-	lds udata+U_DATA__U_SYSCALL_SP
-	; Now the fun bit - the CPU saves X and D so we have to patch them
-	; into the return frame
-	ldd udata+U_DATA__U_RETVAL
-	tsx
-	stab 1,x			; return in D
-	staa 2,x
-	ldd udata+U_DATA__U_ERROR
-	std 3,x				; error in X
-rti_return:
-	ldab udata+U_DATA__U_CURSIG
-	beq no_signal
-	clr udata+U_DATA__U_CURSIG
-	ldx #udata+U_DATA__U_SIGVEC
+	clr	udata+U_DATA__U_INSYS
+	ldd	udata+U_DATA__U_RETVAL
+	std	shared_retval
+	ldd	udata+U_DATA__U_ERROR
+	std	shared_error
+	;	Pass back a user stack pointer to set
+	ldx	udata + U_DATA__U_SYSCALL_SP
+	stx	shared_sp
+stub_return:
+	ldab	udata+U_DATA__U_CURSIG
+	stab	shared_signal
+	beq	to_common
+	ldx	#udata+U_DATA__U_SIGVEC
 	abx
 	abx
-	ldy 0,x
-	beq no_signal
-	clr 0,x
-	clr 1,x
-	; Arguments to signal handler
-	clra
-	pshy
-	ldx PROGLOAD+16	; Helper vector FIXME: assumes loaded at base
-	; We are off the kernel stack at this point so we can
-	; enable interrupts and leap into userspace
-	cli
-	jsr ,x
-signal_return:
-	ins	; Drop the signal number argument
-	ins	; FIXME: shouldn't this be 2 bytes drop only CHECK
-	ins	; And the vector
-	ins
-no_signal:
-	rti
-
-doexec:
-	xgdx				; execute address into x
-	sei
-	clr udata+U_DATA__U_INSYS
-	jsr map_process_always
-	lds udata+U_DATA__U_ISP
-	des				; offset by 1 on the 680X
-	cli
-	pshx
-	pula				; high byte is our reloc base
-	ins				; drop the other byte
-	ldab #DPBASE			; relocation info for DP
-	ldy #0				; clear register
-	jmp 0,x				; from the caller D
-
-trap_handler:
-	; Were we in kernel - if so die horribly
-	tst udata + U_DATA__U_INSYS
-	bne trap_illegal
-	tst udata + U_DATA__U_ININTERRUPT
-	bne trap_illegal
-	; Kick the user up the backside with a SIGILL. If the return from
-	; it and didn't reset the handler then it will kill so it usually
-	; does the right thing.
-	ldx #4				; SIGILL
-	pshx
-	ldx udata+U_DATA__U_PTAB
-	ldx P_TAB__P_PID_OFFSET,x
-	pshx				; expected hole
-	pshx				; arg
-	ldd #0x3980			; kill, 68hc11 style call
-	swi				; send ourselves a SIGILL
-	rti				; and if we come back just
-					; drop back to the expected frame
-
-trap_illegal:
-	ldx #illegalmsg
-	jsr outstring
-	tsx
-	ldx 8,x
-	ldab ,x
-	jsr outcharhex
-trapx:
-	ldx #atmsg
-	jsr outcharhex
-	tsx
-	ldx 8,x
-	jsr outx
-	ldx #nlmsg
-	jsr outstring
-	jsr plt_monitor
-
-nmi_handler:
-	jsr map_kernel_di
-	ldx #nmimsg
-	jsr outstring
-	bra trapx
-
-illegalmsg:
-	.ascii "illegal instruction "
-	.byte 0
-atmsg:
-	.ascii " at "
-nmimsg:
-	.ascii "[NMI]"
-	.byte 0
-nlmsg:
-	.byte 13,10,0
+	ldy	0,x
+	beq	to_common
+	clr	0,x
+	clr	1,x
+	sty	shared_sigvec
+	; The stub code in the user bank gets passed the syscall
+	; return and error plus the signal if any and vector. That
+	; is sufficient for it to do all the dispatching
+	; Get back the lost word for the shared stack and
+	; jump back
+to_common:
+	pulx
+	jmp	0,x
 
 
 ;
@@ -349,112 +269,112 @@ call_c_irq:
 	rts
 
 ;
-;	The trap saved our entire register state for us
+;	The trap saved our entire register state for us but on the
+;	user stack in the user bank. We have switched to the small
+;	common stack at this point
 ;
-;	At this point our user stack has the RTI frame on it, and the
-;	interrupt stack is clear
 interrupt_handler:
-	sts istack_switched_sp
-
+	; Save the return as the temp stack we were called on will
+	; be lost in the pre-emption case
+	pulx
 	; Switch to the interrupt stack
-	lds #istack_top
+	lds	#istack_top
+	; Save return - this is also where the stub return
+	; signal handling code wants it
+	pshx
 
-	jsr map_save_kernel
-
-	ldaa #1
-	staa udata+U_DATA__U_ININTERRUPT
+	ldaa	#1
+	staa	udata+U_DATA__U_ININTERRUPT
 
 	; Call the C code to process the interrupt
-	ldy #plt_interrupt
-	jsr call_c_irq
+	ldy	#plt_interrupt
+	jsr	call_c_irq
 
 	; Was the interrupt to kernel code ?
-	tst udata+U_DATA__U_INSYS
-	bne iretk
+	tst	udata+U_DATA__U_INSYS
+	bne	iretk
 
 	; Interrupts from user code may pre-empt
-	tst need_resched
-	bne preemption
+	tst	need_resched
+	bne	preemption
 
-	; No pre-emption - map the process back
-	jsr map_process_always
-	; Switch back to our kernel stack with the RTI frame
-	lds istack_switched_sp
 	; Clean up
-	clr udata+U_DATA__U_ININTERRUPT
-	tst udata+U_DATA__U_INSYS
-	bne no_signals
-	jmp rti_return
-no_signals:
-	rti
-	;
-	; Return to kernel mode
-	; We don't check signals in this case and we use map_restore
-	;
+	clr	udata+U_DATA__U_ININTERRUPT
+	clr	shared_preempt
+	; Switch back to the stub stack
+	; and do the signal bits
+	bra	stub_return
 iretk:
-	jsr map_restore
-	lds istack_switched_sp
-	clr udata+U_DATA__U_ININTERRUPT
-	rti
+	pulx
+	; No signal on this path
+	clr	shared_signal
+	clr	shared_preempt
+	clr	udata+U_DATA__U_ININTERRUPT
+	jmp	,x
 
 ;
 ;	We enter the pre-emption code with our RTI frame on the user stack
-;	and running on the interrupt stack
+;	(not mapped) and running on the interrupt stack
+;
+;	TODO finish stack handling - need to sort out a way back down
+;	the work stack which we lost in the pre-emption.
 ;
 preemption:
-	clr need_resched
-	; Save the stack pointer across as istack_switched_sp is not per
-	; task
-	ldd istack_switched_sp
-	std udata+U_DATA__U_SYSCALL_SP
+	clr	need_resched
+	; Save the stack pointer across as shared_sp is not per task
+	ldd	shared_sp
+	std	udata+U_DATA__U_SYSCALL_SP
 	; Switch to our own process kernel stack while switched (the
-	; interrupt stack will be used by other things in the meantime).
-	lds #kstack_top
-	ldab #1
-	stab udata+U_DATA__U_INSYS
+	; shared and int stack will be used by other things in the meantime).
+	; Get back the return address
+	pulx
+	lds	#kstack_top
+	; 	Move it onto the kstack instead
+	pshx
+
+	ldab	#1
+	stab	udata+U_DATA__U_INSYS
 
 	; Signal check
 	ldy #chksigs
 	jsr call_c_irq
 
-	ldx udata+U_DATA__U_PTAB
-	ldab P_TAB__P_STATUS_OFFSET,x
-	cmpb #P_RUNNING
-	bne not_running
+	ldx	udata+U_DATA__U_PTAB
+	ldab	P_TAB__P_STATUS_OFFSET,x
+	cmpb	#P_RUNNING
+	bne	not_running
 	; Move from running to ready state
-	ldab #P_READY
-	stab P_TAB__P_STATUS_OFFSET,x
+	ldab	#P_READY
+	stab	P_TAB__P_STATUS_OFFSET,x
 	; If we are running set the punishment flag for CPU hogs
-	bset P_TAB__P_FLAGS_OFFSET,x #PFL_BATCH
+	bset	P_TAB__P_FLAGS_OFFSET,x #PFL_BATCH
 not_running:
 	; Task switch
-	jsr plt_switchout
+	jsr	plt_switchout
 	; Time will pass, things will run and eventually we will reappear
 	; here when we get rescheduled
-	clr udata+U_DATA__U_ININTERRUPT
-	clr udata+U_DATA__U_INSYS
-	; Map back in
-	jsr map_process_always
-	; Return to our user stack
-	lds udata+U_DATA__U_SYSCALL_SP
-	; Check for signals
-	ldaa udata+U_DATA__U_CURSIG
-	beq no_signals
-	jmp rti_return
+	; Interrupts will be back off
+	clr	udata+U_DATA__U_ININTERRUPT
+	clr	udata+U_DATA__U_INSYS
+	ldx	udata+U_DATA__U_SYSCALL_SP
+	;	So we come back on the right syscall or istack
+	stx	shared_sp
+	ldaa	#1
+	staa	shared_preempt
+	;	Kstack has X holding the return as desired
+	bra 	stub_return
 
-	.section .text
-
-	.globl set_cpu_type
-	.globl sys_cpu
-	.globl sys_cpu_feat
-	.globl sys_stubs
+	.globl	set_cpu_type
+	.globl	sys_cpu
+	.globl	sys_cpu_feat
+	.globl	sys_stubs
 
 set_cpu_type:
 	rts		; no variants to care about
 sys_cpu:
-	.byte 2		; 6800 class CPU
+	.byte	2	; 6800 class CPU
 sys_cpu_feat:
-	.byte 5		; 6800 with 6801/3 and 68HC11 features
+	.byte	5	; 6800 with 6801/3 and 68HC11 features
 sys_stubs:
 	swi
 	rts
@@ -472,6 +392,183 @@ sys_stubs:
 	nop
 	nop
 	nop
+
+/*
+ *	This next section is the stub code run in the user map. It must
+ *	access only user spare and shared common
+ *
+ *	Because the shared stacks vanish the callee saves the return
+ *	address and jumps back. We need to then re-establish the stack
+ */
+
+	.section .common
+/*
+ *	An interrupt occurred. 
+ */
+common_intr:
+	;	The caller will save this passed shared_sp and put it back
+	;	on the return as needed
+	sts	shared_sp
+	lds	#int_stack	;	common interrupt stack (small be careful)
+	jsr	map_save_kernel
+	jsr	interrupt_handler
+	lds	#int_stack
+	ldaa	shared_preempt
+	bne	was_preempt
+	jsr	map_restore
+	;	Back to the user stack
+	lds	shared_sp
+	bra	signal_out
+was_preempt:
+	jsr	map_process_always
+	lds	shared_sp
+	bra	signal_out
+
+common_syscall:
+	;	Sort our the arguments and stash them in common
+	;	space. interrupts must be off.
+	sts	shared_sp	;	temporary stack save
+	tsx
+	staa	shared_syscall
+	bitb	#0x80
+	beq	syscall_0x
+	ldd	11,x		;	13 is the return for the user
+	std	shared_argn	;	layer stub
+	ldd	15,x
+	std	shared_argn1
+	ldd	17,x
+	std	shared_argn2
+	ldd	19,x
+	bra	syscall_main
+syscall_0x:
+	abx
+	ldd	9,x
+	std	shared_argn
+	ldd	7,x
+	std	shared_argn1
+	ldd	5,x
+	std	shared_argn2
+	ldd	3,x
+syscall_main:
+	std	shared_argn3
+
+	lds	#syscall_stack
+
+	;	Now map and run the kernel code
+	;	We are on the tiny shared stack
+
+	;	We pass the user stack in shared_sp
+
+	jsr	map_kernel
+
+	jsr	unix_syscall_entry
+
+	;	Put the stack back to do the remap
+	lds	#syscall_stack
+	jsr	map_process_always
+
+	;	Back to the user stack saved by
+	;	the caller
+	lds	shared_sp
+
+	; Shared area holds stuff we need
+	; We are on the user stack so have the rti frame to fiddle with
+	tsx
+	ldd	shared_retval
+	stab	1,x
+	staa	2,x
+	ldd	shared_error
+	std	3,x
+signal_out:
+	ldab	shared_signal
+	beq	no_signal
+	clra
+	ldy	shared_sigvec
+	pshy
+	ldx	PROGLOAD+16
+	; From this moment shared_* goes invalid
+	cli
+	jsr	,x
+	ins	; drop the vector we pushed
+	ins
+no_signal:
+	rti
+
+doexec:
+	sei
+	clr	udata+U_DATA__U_INSYS
+	ldx	udata+U_DATA__U_ISP
+	lds	#syscall_stack		; Temp stack for the switch
+	jsr	map_process_always
+	txs				; Set the stack up	
+	xgdx				; execute address into x
+	cli
+	pshx
+	pula				; high byte is our reloc base
+	ins				; drop the other byte
+	ldab	#DPBASE			; relocation info for DP
+	ldy	#0			; clear register
+	jmp	0,x			; from the caller D
+
+;
+trap_handler:
+	; Were we in kernel - if so die horribly
+	tst	udata + U_DATA__U_INSYS
+	bne	trap_illegal
+	tst	udata + U_DATA__U_ININTERRUPT
+	bne	trap_illegal
+	; Kick the user up the backside with a SIGILL. If the return from
+	; it and didn't reset the handler then it will kill so it usually
+	; does the right thing.
+	ldx	#4			; SIGILL
+	pshx
+	ldx	udata+U_DATA__U_PTAB
+	ldx	P_TAB__P_PID_OFFSET,x
+	pshx				; expected hole
+	pshx				; arg
+	ldd	#0x3980			; kill, 68hc11 style call
+	swi				; send ourselves a SIGILL
+	rti				; and if we come back just
+					; drop back to the expected frame
+
+; These run with interrupts off on entry
+trap_illegal:
+	lds	#int_stack	
+	jsr	map_kernel_di
+	ldx	#illegalmsg
+	jsr	outstring
+	tsx
+	ldx	8,x
+	ldab	,x
+	jsr	outcharhex
+trapx:
+	ldx	#atmsg
+	jsr	outcharhex
+	tsx
+	ldx	8,x
+	jsr	outx
+	ldx	#nlmsg
+	jsr	outstring
+	jsr	plt_monitor
+
+nmi_handler:
+	lds	#int_stack	
+	jsr	map_kernel_di
+	ldx	#nmimsg
+	jsr	outstring
+	bra	trapx
+
+illegalmsg:
+	.ascii	"illegal instruction "
+	.byte	0
+atmsg:
+	.ascii	" at "
+nmimsg:
+	.ascii	"[NMI]"
+	.byte	0
+nlmsg:
+	.byte	13,10,0
+
 
 /*
  * Support code chunks pulled from the gcc larith.asm and hacked about a bit
