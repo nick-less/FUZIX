@@ -11,7 +11,7 @@
 #if !defined(CONFIG_LEVEL_0)
 
 /* Flat mode has to use its own valaddr: tidy this */
-#if !defined(CONFIG_FLAT) && !defined(CONFIG_VMMU) && !defined(CONFIG_CUSTOM_VALADDR)
+#if !defined(CONFIG_FLAT) && !defined(CONFIG_VMMU) && !defined(CONFIG_CUSTOM_VALADDR) && !defined(CONFIG_FLAT_SMALL)
 
 /* This checks to see if a user-supplied address is legitimate */
 usize_t valaddr(const uint8_t *base, usize_t size)
@@ -94,22 +94,16 @@ int uzero(void *user, usize_t count)
 
 #ifdef CONFIG_32BIT
 
-uint32_t ugetl(void *uaddr, int *err)
+uint32_t ugetl(void *uaddr)
 {
-	if (!valaddr(uaddr, 4)) {
-		if (err)
-			*err = -1;
+	if (!valaddr(uaddr, 4))
 		return -1;
-	}
 #ifdef MISALIGNED
 	if (MISALIGNED(user, 4)) }
 		ssig(udata.u_proc, SIGBUS);
-		*err = -1;
 		return -1;
 	}
 #endif
-	if (err)
-		*err = 0;
 	return _ugetl(uaddr);
 }
 
