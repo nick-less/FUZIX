@@ -585,7 +585,7 @@ typedef struct u_data {
     uaddr_t u_texttop;		/* Top of binary text (used for I/D systems) */
 #endif
    /* TODO: A specific define for "32bit" */
-#if defined(__mc68000__) || defined(__ns32k__)
+#if defined(__mc68000__) || defined(__ns32k__) || defined(__ARM_ARCH_7EM__)
     uaddr_t u_database;		/* data base for systems with separate code/data
 				   blocks. FIXME - sort this out in the usermode hdr */
 #endif
@@ -881,7 +881,9 @@ extern bool validdev(uint16_t dev);
    (with a passable compiler) all the supporting error logic. */
 #ifdef CONFIG_LEVEL_0
 /* Shortcut all the validation */
-#define valaddr(a,b)	(b)
+#define valaddr(a,b,c)	(b)
+#define valaddr_r(a,b)	(b)
+#define valaddr_w(a,b)	(b)
 #define uget(a,b,c)	(_uget(a, b, c) * 0)
 #define uput(a,b,c)	(_uput(a, b, c) * 0)
 #define ugetc(a)	_ugetc(a)
@@ -892,7 +894,9 @@ extern bool validdev(uint16_t dev);
 #define uputl(v, p)	_uputl(v, p)
 #define uzero(a,b)	(_uzero(a, b) * 0)
 #else
-extern usize_t valaddr(const uint8_t *base, usize_t size);
+extern usize_t valaddr(const uint8_t *base, usize_t size, uint_fast8_t is_write);
+extern usize_t valaddr_r(const uint8_t *base, usize_t size);
+extern usize_t valaddr_w(const uint8_t *base, usize_t size);
 extern int uget(const void *userspace_source, void *dest, usize_t count);
 extern int uput (const void *source,   void *userspace_dest, usize_t count);
 extern int16_t  ugetc(const void *userspace_source);

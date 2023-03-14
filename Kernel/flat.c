@@ -98,9 +98,8 @@ static struct mem *mem_alloc(void)
 static void *kdup(void *p, void *e, uint8_t owner)
 {
 	void *n = kmalloc(e - p, owner);
-	if (n) {
+	if (n)
                 copy_blocks(n, p, (e - p) >> 9);
-	}
 	return n;
 }
 
@@ -239,7 +238,7 @@ void pagemap_switch(ptptr p, int death)
 	int lproc;
 
 #ifdef DEBUG
-	kprintf("%d: ps:store %p mem %p\n", proc, store[proc], mem[proc]);
+	kprintf("%d: ps:store %p mem %p death %d\n", proc, store[proc], mem[proc], death);
 #endif
 	/* We have the right map (unique or we ran the forked copy last) */
 	if (store[proc] == mem[proc]) {
@@ -306,8 +305,7 @@ void pagemap_free(ptptr p)
 		if (m->users > 1) {
 			int n = pagemap_sharer(m);
 #ifdef DEBUG
-			kprintf
-			    ("%d: pagemap_free: busy non live - giving away to %d.\n",
+			kprintf("%d: pagemap_free: busy non live - giving away to %d.\n",
 			     proc, n);
 #endif
 
@@ -399,6 +397,9 @@ int pagemap_realloc(struct exec *a, usize_t unused)
 	udata.u_database = (uaddr_t)mb->start;
 	mb--;
 	udata.u_codebase = (uaddr_t)mb->start;
+#ifdef DEBUG
+	kprintf("code %p - %p, data %p - %p\n", udata.u_codebase, udata.u_codebase + csize - 1, udata.u_database, udata.u_database + size - 1);
+#endif
 #else
 	size = a->a_text + a->a_data + a->a_bss + a->stacksize;
 	size = (size + 511) & ~511;
@@ -411,14 +412,14 @@ int pagemap_realloc(struct exec *a, usize_t unused)
 	pagemap_free(udata.u_ptab);
 	udata.u_codebase = (uaddr_t)mb->start;
 	udata.u_database = udata.u_codebase + a->a_text;
+#ifdef DEBUG
+	kprintf("code %p data %p - %p\n", udata.u_codebase, udata.u_database, udata.u_codebase + size - 1);
+#endif
 #endif
 	/* Tell the exec code where the top of the resulting memory (and
 	   thus where to build the stack) is */
 	udata.u_top = udata.u_database + a->a_data + a->a_bss + a->stacksize;
 	store[proc] = mem[proc] = m;
-#ifdef DEBUG
-	kprintf("code %p - %p, data %p - %p\n", udata.u_codebase, udata.u_codebase + csize - 1, udata.u_database, udata.u_database + size - 1);
-#endif
 	return 0;
 }
 
@@ -495,10 +496,8 @@ arg_t _memfree(void)
  *	two allocations are adjacent, therefore we don't allow a copy across
  *	what happens to be a join of two banks. We could fix this but it's not
  *	clear it would be wise!
- *
- *	FIXME: need to fix this due to code/data alignment ?
  */
-usize_t valaddr(const uint8_t *pp, usize_t l)
+usize_t valaddr(const uint8_t *pp, usize_t l, uint_fast8_t is_write)
 {
 	const void *p = pp;
 	const void *e = p + l;
@@ -506,6 +505,11 @@ usize_t valaddr(const uint8_t *pp, usize_t l)
 	unsigned int n = 0;
 	struct memblk *m = &mem[proc]->memblk[0];
 
+#ifdef CONFIG_SPLIT_ID
+	/* First block is R/O */
+	if (is_write)
+		n++;
+#endif		
 	while (n < MAX_BLOCKS) {
 		/* Found the right block ? */
 		if (m->start && p >= m->start && p < m->end) {
@@ -526,6 +530,16 @@ usize_t valaddr(const uint8_t *pp, usize_t l)
 	}
 	udata.u_error = EFAULT;
 	return 0;
+}
+
+usize_t valaddr_r(const uint8_t *pp, usize_t l)
+{
+	return valaddr(pp, l, 0);
+}
+
+usize_t valaddr_w(const uint8_t *pp, usize_t l)
+{
+	return valaddr(pp, l, 1);
 }
 
 #ifdef CONFIG_LEVEL_2		/* Coredump support */

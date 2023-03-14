@@ -18,7 +18,9 @@
 #define N_SOCKFD	0x40
 #define N_ADDR_IN	0x20
 #define N_ADDR_OUT	0x10
-#define N_DATAIO	0x08
+#define N_DATAI		0x08
+#define N_DATAO		0x04
+#define N_DATAIO	0x0C
 
 #define NUM_NETCALL	10
 
@@ -29,8 +31,8 @@ static uint8_t ncall_tab[NUM_NETCALL] = {
 	N_SOCKFD | N_ADDR_IN,	/* connect */
 	N_MAKE | N_SOCKFD | N_ADDR_OUT,	/* accept */
 	N_SOCKFD | N_ADDR_OUT,	/* getsockname */
-	N_SOCKFD | N_DATAIO | N_ADDR_IN,	/* sendto */
-	N_SOCKFD | N_DATAIO | N_ADDR_OUT,	/* recvfrom */
+	N_SOCKFD | N_DATAO | N_ADDR_IN,	/* sendto */
+	N_SOCKFD | N_DATAI | N_ADDR_OUT,	/* recvfrom */
 	N_SOCKFD,		/* shutdown */
 	N_SOCKFD | N_ADDR_OUT	/* getpeername */
 };
@@ -142,7 +144,7 @@ arg_t _netcall(void)
 	int n;
 	inoptr ino = NULL;
 
-	if (valaddr(argptr, sizeof(udata.u_net.args)) !=
+	if (valaddr_r(argptr, sizeof(udata.u_net.args)) !=
 	    sizeof(udata.u_net.args)) {
 		udata.u_error = EFAULT;
 		return -1;
@@ -175,7 +177,7 @@ arg_t _netcall(void)
 	   in some protocols */
 	if (op & N_DATAIO) {
 		udata.u_base = (void *) *ap;
-		s = valaddr((void *) *ap, ap[1]);
+		s = valaddr((void *) *ap, ap[1], !!(op & N_DATAI));
 		if (s == 0 && ap[1])
 			return -1;
 		ap += 2;
