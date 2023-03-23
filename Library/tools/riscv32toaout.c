@@ -1,14 +1,15 @@
 /*
- *	Convert an NS32K a.out binary into something more digestable
+ *	Convert a riscv32 binary image into our a.out format
  *
- *	We linked it at 0x00000000 and 0x00010200
+ *	RISC-V relocations are complicated but providing we keep to a 4K
+ *	alignment the 20:12 split in the loads and the like means that
+ *	all we have to worry about is LUI and data relocations, both of
+ *	which look and work the same because of the layout of LUI.
  *
- *	We need to do this double shifting because extension fields are big endian
- *	but everything else is little endian.
- *
- *	A difference pattern of 0 2 1 0 is a little endian shift at the start
- *	A difference pattern of 0 1 2 0 is a big endian one. We store little endian
- *	with the top bit set and handle it with extra magic in the loader (ick)
+ *	The only real oddity here is that we link the binary to run
+ *	from 0x1000 and 0x2000 as 0x0000 will cause the linker to remove
+ *	upper loads and rely upon the sign extend thus changing the binary
+ *	layout and size.
  *
  *	TODO: stack size argument
  */
@@ -30,12 +31,11 @@ struct exec_aout {
     uint32_t	a_drsize;		/* Size in bytes of data relocation table */
 };
 
-#define MID_FUZIXNS32	0x03C0
+#define MID_RISCV32	0x03F0
 #define NMAGIC		0410
 
 static struct exec_aout hdr;
 static uint8_t *b0, *b1;
-
 
 static uint8_t *load_block(FILE *fp, off_t base, size_t len)
 {
@@ -48,6 +48,7 @@ static uint8_t *load_block(FILE *fp, off_t base, size_t len)
             fprintf(stderr, "Seek error.\n");
             exit(1);
         }
+        fprintf(stderr, "Loading %d bytes from %d\n", len, base);
         if (fread(m + 0x20, len, 1, fp) != 1) {
             fprintf(stderr, "Read error loading binary block.\n");
             exit(1);
@@ -56,72 +57,84 @@ static uint8_t *load_block(FILE *fp, off_t base, size_t len)
            seem able to do link orders and custom sections */
         memset(m, 0, 0x20);
         /* FIXME : configurable */
-        *(uint32_t *)m = 8192;		/* Stack size */
+        *(uint32_t *)m = 16384;		/* Stack size */
         return m;
 }
 
 /* Write relocation records */
 static void relocate_binary(FILE *o)
 {
-    unsigned n = hdr.a_text + hdr.a_data;
+    int n = hdr.a_text + hdr.a_data;
     uint8_t *p0 = b0, *p1 = b1;
     int i;
     unsigned r;
-    unsigned skip;
-    unsigned endian;
 
-    while(n--) {
+    while(n-- > 0) {
         uint8_t diff = *p1 - *p0;
         if (diff) {
-            /* Byte 2 of a big endian relocation */
-            if (diff == 0x02) {
-                endian = 1;
-                skip = 2;
-            } else if (diff == 0x01) {
-                /* Byte 2 of a little endian relocation */
-                endian = 0;
-                skip = 2;
-            } else {
+            /* Second byte of a little endian relocation */
+            if (diff != 0x10) {
                 fprintf(stderr, "Reloc mismatch %d @ %06X %d %d\n", diff, (unsigned)(p0 - b0), *p0, *p1);
                 for (i = -8; i < 8; i++)
                     fprintf(stderr, "%02X|%02X\n", p0[i], p1[i]);
                 exit(1);
             }
-                
+            *p0 -= 0x10;	/* Shift to 0 base */
             r = p0 - b0;
             r--;	/* Get correct byte start */
-
-#ifdef DEBUG
-            if (endian == 0)
-                fprintf(stderr, "%08X: %08X\n",
-                    r, *((uint32_t *)(b0 + r)));
-            else {
-                   fprintf(stderr, "%08X: %08X\n",
-                    r, ntohl(*((uint32_t *)(b0 + r))));
-            }
-#endif            
-            if (endian == 1)
-                r |= 0x80000000;
             fputc(r, o);
             fputc(r >> 8, o);
             fputc(r >> 16, o);
             fputc(r >> 24, o);
             hdr.a_trsize += 4;
-            p0 += skip;
-            p1 += skip;
-            n -= skip;
+            p0 += 2;
+            p1 += 2;
+            n -= 2;
         }
         p0++;
         p1++;
     }
 }
 
+static void build_header(FILE *m)
+{
+    unsigned tsize = 0, dsize = 0, bsize = 0;
+    char buf[256];
+    char sym[256];
+    unsigned addr;
+    char type;
+    while(fgets(buf, 255, m)) {
+        if (sscanf(buf, "%x %c %s", &addr, &type, sym) != 3)
+            continue;
+        if (strcmp(sym, "__stubs") == 0 && addr != 0x1000) {
+            fprintf(stderr, "__stubs: bad base.\n");
+            exit(1);
+        }
+        if (strcmp(sym, "__data_start") == 0)
+            tsize = addr;
+        if (strcmp(sym, "_edata_unaligned") == 0)
+            dsize = addr;
+        if (strcmp(sym, "_end") == 0)
+            bsize = addr;
+        if (strcmp(sym, "_start") == 0)
+            hdr.a_entry = addr - 0x1000;
+    }
+    if (tsize == 0 || dsize == 0 || hdr.a_entry == 0) {
+        fprintf(stderr, "Missing symbols.\n");
+        exit(1);
+    }
+    hdr.a_text = tsize - 0x1000;
+    hdr.a_data = dsize - tsize;
+    hdr.a_bss = bsize - hdr.a_data;
+    hdr.a_syms = 0;
+}
+
 int main(int argc, char *argv[])
 {
-    FILE *i0, *i1, *o;
+    FILE *i0, *i1, *o, *m;
 
-    if (argc != 4) {
-        fprintf(stderr, "%s in0 in1 out\n", argv[0]);
+    if (argc != 5) {
+        fprintf(stderr, "%s in0 in1 out map\n", argv[0]);
         exit(1);
     }
     i0 = fopen(argv[1], "r");
@@ -139,20 +152,26 @@ int main(int argc, char *argv[])
         perror(argv[3]);
         exit(1);
     }
-    if (fread(&hdr, sizeof(hdr), 1, i0) != 1) {
-        fprintf(stderr, "%s: not a valid binary.\n", argv[1]);
+    m = fopen(argv[4], "r");
+    if (m == NULL) {
+        perror(argv[4]);
         exit(1);
     }
-/*    printf("Text size %x, Data %x, BSS %x, Run from %x\n",
-        hdr.a_text, hdr.a_data, hdr.a_bss, hdr.a_entry); */
+
+    /* Manufacture the header */
+    build_header(m);
+    fclose(m);
+
+    printf("Text size %x, Data %x, BSS %x, Run from %x\n",
+        hdr.a_text, hdr.a_data, hdr.a_bss, hdr.a_entry);
 
     /* We assume -N (so no magic padding). Change this into two if we decide
        to do alignment in the file. As we've no MMU and fancy map paging we
        don't need alignment features. Note that the first 0x20 bytes of the
        block are cleared as the input binary is 0x20 offset to allow for the
        stub block. */
-    b0 = load_block(i0, sizeof(struct exec_aout), hdr.a_text + hdr.a_data);
-    b1 = load_block(i1, sizeof(struct exec_aout), hdr.a_text + hdr.a_data);
+    b0 = load_block(i0, 0, hdr.a_text + hdr.a_data - 0x20);
+    b1 = load_block(i1, 0, hdr.a_text + hdr.a_data - 0x20);
 
     hdr.a_trsize = hdr.a_drsize = 0;
     hdr.a_syms = 0;
@@ -175,7 +194,7 @@ int main(int argc, char *argv[])
     fclose(i0);
     fclose(i1);
     rewind(o);
-    hdr.a_midmag = htonl(NMAGIC | (MID_FUZIXNS32 << 16));
+    hdr.a_midmag = htonl(NMAGIC | (MID_RISCV32 << 16));
     if (fwrite(&hdr, sizeof(hdr), 1, o) != 1) {
         fprintf(stderr, "%s: write error on final header.\n", argv[3]);
         exit(1);
