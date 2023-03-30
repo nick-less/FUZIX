@@ -22,7 +22,7 @@
 #ifndef __cpmutl_h
 #define __cpmutl_h
 
-#if defined(__SDCC_z80) || defined(__SDCC_z180)
+#if defined(__SDCC_z80) || defined(__SDCC_z180) || defined(__CC65__) || defined(__CC68__)
 #define __attribute__(x)
 #endif
 
@@ -58,7 +58,7 @@ struct cpmdpb {
 
 struct cpmfcb *get_dir_entry(DIR *dirp, struct cpmfcb *search_fcb, int first);
 int delete_files(struct cpmfcb *fcb);
-int update_allocv();
+int update_allocv(void);
 char *getname(struct cpmfcb *fcb);
 int setname(struct cpmfcb *fcb, char *name);
 int match_fcb(struct cpmfcb *mask, struct cpmfcb *fcb);

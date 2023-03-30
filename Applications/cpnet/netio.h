@@ -30,9 +30,9 @@
 #define ACK   6
 
 
-void wait_for_packet();
-int get_packet(char *data, int *len, int *fnc, int *sid);
-int send_packet(int to, int fnc, char *data, int len);
+void wait_for_packet(void);
+int get_packet(unsigned char *data, int *len, int *fnc, int *sid);
+int send_packet(int to, int fnc, unsigned char *data, int len);
 int send_ok(int to, int fnc);
 int send_error(int to, int fnc);
 

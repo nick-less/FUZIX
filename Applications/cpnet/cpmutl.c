@@ -31,6 +31,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/ioctl.h>
+#include <termios.h>
 
 #include "main.h"
 #include "cpmutl.h"
@@ -174,7 +175,7 @@ int delete_files(struct cpmfcb *fcb)
 	return retc;
 }
 
-int update_allocv()
+int update_allocv(void)
 {
 	int i;
 
@@ -217,7 +218,7 @@ int setname(struct cpmfcb *fcb, char *name)
 	int i;
 	char *p;
 
-	p = fcb->name;
+	p = (char *)fcb->name;
 	for (i = 0; i < 8; ++i) {
 		if (*name && (*name != '.')) {
 			*p++ = toupper(*name & 0x7f);
