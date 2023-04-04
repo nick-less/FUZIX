@@ -117,12 +117,13 @@ _plt_monitor:
 	jr c, _plt_monitor
 
 _plt_reboot:
+	; FIXME: need to turn the Spectranet off
 	di
-	im 1
-	ld bc, #0x7ffd
-	xor a		; 128K ROM, initial banks, low screen
-	out (c), a
-        rst 0		; Into the ROM (SpectraNet will do the rest)
+	im	1
+	ld	bc, #0x7ffd
+	xor	a		; 128K ROM, initial banks, low screen
+	out	(c), a
+        rst	0		; Into the ROM (SpectraNet will do the rest)
 
 plt_interrupt_all:
         ret
@@ -146,7 +147,7 @@ init_early:
 	out (0xFE),a
         ret
 
-	.area _VIDEO
+	.area _COMMONMEM
 
 init_hardware:
         ; set system RAM size
@@ -157,44 +158,52 @@ init_hardware:
 	; We lose the following to the system
 	; 0: first kernel bank at C000
 	; 1: second kernel bank at C000
-	; 2: 4000-7FFF (screen and buffers)
+	; 2: 8000-BFFF (screen and buffers)
 	; 3: fourth kernel bank at C000
-	; 5: 8000-BFFF (working 16K copy)
-	; 6: second kernel bank at C000
+	; 5: 4000-7FFF (working 16K copy)
 	; 7: third kernel bank at C000
 	; TODO: figure out the right value!
         ld	hl, #(256 - 96)
         ld	(_procmem), hl
 
 	;
-	;	No low RAM so need IM2 and custom syscall interface
-	;	(will need to tackle that nicely in libc too)
+	;	No low RAM so need IM2
 	;
-
+	ld	b,#8
+set_vectors:
+	push	bc
+	ld	a,b
+	dec	a
+	call	switch_bank
+	ld	a,#0x18		; JR
+	ld	(0xFFFF),a
 	ld	a,#0xC3
-	ld	(0xFFFD),a
 	ld	(0xFFF4),a
-	ld	hl,#unix_syscall_entry
-	ld	(0xFFFE),hl
 	ld	hl,#interrupt_handler
 	ld	(0xFFF5),hl
+	pop	bc
+	djnz	set_vectors
+
+	ld	a,(current_map)
+	call	switch_bank
+
         ; screen initialization
 	push	af
 	call	_vtinit
 	pop	af
 
 	; interrupt vectors to FFFF
-intvector:
 	ld	hl,#0x1000
 	ld	bc,#0xFF
+intvector:
 	ld	(hl),c
 	inc	hl
 	djnz	intvector
 	ld	(hl),c
 
-	ld a,#0x10
-	ld i,a
-	im 2			; Everything ends up at FFF4
+	ld	a,#0x10
+	ld	i,a
+	im	2		; Everything ends up at FFF4
 
         ret
 
@@ -203,6 +212,7 @@ intvector:
 
         .area _COMMONMEM
 
+	; Done at boot up
 _program_vectors:
 	ret
 
@@ -224,7 +234,7 @@ switch_bank:
         ld (current_map), a
 	push bc
         ld bc, #0x7ffd
-	or #BANK_BITS	   ; Spectrum 48K ROM
+	or #BANK_BITS	   ; Spectrum 48K ROM, high video
         out (c), a
 	pop bc
         ret
@@ -357,17 +367,17 @@ bankina0:
 	ld d, (hl)
 	inc hl
 	push hl		   ; Restore corrected return pointer
-	ld bc, (current_map)	; get current bank into B
+	ld bc, (current_map)	; get current bank into C
 	call switch_bank   ; Move to new bank
 	; figure out which bank to map on the return path
 	ld a, c
-	or a
+	or a			; Physical bank was 0 so CODE1
 	jr z, __retmap1
-	dec a
+	dec a			; Physucal bank was 1 so CODE2
 	jr z, __retmap2
-	cp #1			;  3  phys = logical 4
+	cp #2			; Physical bank was 3 so CODE4
 	jr z, __retmap4
-	jr __retmap3
+	jr __retmap3		; Must be CODE3 (7)
 
 callhl:	jp (hl)
 
@@ -394,7 +404,7 @@ bankina1:
 __retmap1:
 	ex de, hl
 	call callhl	   ; call the function
-	xor a		   ; return to bank 1 (physical 1)
+	xor a		   ; return to bank 1 (physical 0)
 	jp switch_bank
 __bank_1_3:
 	ld a, #7
@@ -464,10 +474,10 @@ __retmap4:
 	jp switch_bank
 __bank_4_2:
 	ld a, #1
-	jr bankina3
+	jr bankina4
 __bank_4_3:
 	ld a, #7
-	jr bankina3
+	jr bankina4
 
 
 ;
@@ -486,7 +496,7 @@ __stub_0_a:
 	jr z, __stub_1_ret
 	dec a		; bank 1 (logical 2)
 	jr z, __stub_2_ret
-	cp #1		; bank 3 (logical 4)
+	cp #2		; bank 3 (logical 4)
 	jr z, __stub_4_ret
 	jr __stub_3_ret	; bank 7 (logical 3)
 __stub_0_2:
@@ -574,7 +584,7 @@ __stub_4_a:
 __stub_4_ret:
 	ex de, hl
 	call callhl
-	ld a,#2
+	ld a,#3
 	call switch_bank
 	pop de
 	push de		; dummy the caller will discard
