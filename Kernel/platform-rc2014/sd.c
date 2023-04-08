@@ -31,14 +31,14 @@ void pio_setup(void)
       pio_c = 0x1C;
       spi_port = 0x1D;
     } else {
-#ifdef CONFIG_RC2014_EXTREME
-      pio_c = 0x6BB8;
-      spi_port = 0x69B8;
-#else
       pio_c = 0x6B;
       spi_port = 0x69;
-#endif
     }
+    /* Pin names in brackets are mapping onto Gluino */
+    /* Data on PIOB bit 0 (D11 / CIPO */
+    /* Clock on PIOB bit 4 (D13 / SCL) */
+    /* CS on PIOB bit 3 (D10 / SS) */
+    /* Data on PIOB bit 7 (D12 /COPI) */
     spi_data = 0x01;
     spi_clock = 0x10;
 
@@ -79,7 +79,7 @@ bool sd_spi_receive_sector(void) __naked
 not_swapin:
 #endif
     or a
-    jr nz, from_user
+    jr nz, to_user
     call map_buffers
     jr doread
 to_user:

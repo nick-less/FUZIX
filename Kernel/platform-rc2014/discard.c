@@ -306,18 +306,17 @@ void init_hardware_c(void)
 	}
 
 #ifdef CONFIG_RC2014_PROPGFX
-	macca_present = 1;
+	macca_present = macca_init();
 #endif
 	if (macca_present) {
-		macca_init();
 		if (shadowcon == 0) {
 			shadowcon = 1;
 			vt_twidth = 40;
 			vt_tright = 39;
 			vt_theight = 24;
 			vt_tbottom = 23;
+			curvid = vidcard[1] = VID_MACCA;
 			vtinit();
-			vidcard[1] = curvid;
 		}
 		shadowcon = 1;
 	}
@@ -435,23 +434,27 @@ void vdu_setup(void)
 	if (ef9345_present)
 		num_tms--;
 	if (macca_present)
-		num_tms--;
+		num_tms -= 2;
 
 	if (shadowcon) {
 		uint8_t n = 0;
 		shadowcon = 0;
 		while (n++ < num_tms)
 			insert_uart(0x98, &tms_uart);
-		if (macca_present)
-			insert_uart(0x40, &macca_uart);
+		if (macca_present) {
+			insert_uart(MACCA_BASE, &macca_uart);
+			insert_uart(MACCA_BASE, &macca_uart);
+		}
 		if (ef9345_present)
 			insert_uart(0x44, &ef_uart);
 		n = 1;
 		/* Now set the vidcard table up */
 		if (ef9345_present)
 			vidcard[n++] = VID_EF9345;
-		if (macca_present)
+		if (macca_present) {
 			vidcard[n++] = VID_MACCA;
+			vidcard[n++] = VID_MACCA;
+		}
 		while(num_tms--)
 			vidcard[n++] = VID_TMS9918A;
 		/* Set the video state up. It's a bit scrambled at this
