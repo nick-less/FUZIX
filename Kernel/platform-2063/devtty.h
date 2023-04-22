@@ -24,5 +24,10 @@ extern uint8_t sio_state[2];
 extern uint8_t sio_txl[2];
 extern uint8_t sio_wr5[2];
 
+extern int8_t vt_twidth;
+extern int8_t vt_tright;
+extern uint8_t vdptype;
+
+extern int vdptty_ioctl(uint8_t minor, uarg_t arg, char *ptr);
 
 #endif
