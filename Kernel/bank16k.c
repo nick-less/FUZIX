@@ -108,8 +108,10 @@ static int pagemap_alloc2(ptptr p, uint8_t c)
 #endif
 
 	/* Pages in the low then repeat the top one */
+	/* Work around gcc 6809 bug */
+	pfptr -= needed;
 	for (i = 0; i < needed; i++)
-		ptr[i] = pfree[--pfptr];
+		ptr[i] = pfree[pfptr + i];
 
 	if (!c)
 		c = ptr[i - 1];
@@ -117,6 +119,9 @@ static int pagemap_alloc2(ptptr p, uint8_t c)
 		ptr[i] = c;
 		i++;
 	}
+#ifdef DEBUG
+	kprintf("map %x%x\n", p->p_page, p->p_page2);
+#endif
 	return 0;
 }
 
@@ -136,7 +141,7 @@ int pagemap_realloc(struct exec *hdr, usize_t size)
 	int8_t have = maps_needed(udata.u_top);
 	int8_t want = maps_needed(size + MAPBASE);
 	uint8_t *ptr = (uint8_t *) & udata.u_page;
-	int8_t i;
+	uint8_t i;
 	uint8_t update = 0;
 	irqflags_t irq;
 
@@ -150,8 +155,8 @@ int pagemap_realloc(struct exec *hdr, usize_t size)
 	   into hyperspace */
 	irq = __hard_di();
 
+retry:
 	if (have > want) {
-		/* FIXME: swapout handling is needed ahead of this */
 		for (i = want; i < have; i++) {
 			pfree[pfptr++] = ptr[i - 1];
 			ptr[i - 1] = ptr[3];
@@ -163,13 +168,21 @@ int pagemap_realloc(struct exec *hdr, usize_t size)
 	} else if (want - have <= pfptr) {
 		/* If we are adding then just insert the new pages, keeping the common
 		   unchanged at the top */
-		for (i = have; i < want; i++)
-			ptr[i - 1] = pfree[--pfptr];
+		i = want - have;
+		/* This is written this slightly odd way to stop gcc 6809 miscompiling it */
+		pfptr -= i;
+		while(i--)
+			*ptr++ = pfree[pfptr + i];
 		update = 1;
-
 	} else {
+#ifdef SWAPDEV
+		/* Swap someone out except for us */
+		swapout(udata.u_ptab);
+		goto retry;
+#else
 		__hard_irqrestore(irq);
 		return ENOMEM;
+#endif
 	}
 	/* Copy the updated allocation into the ptab */
 	udata.u_ptab->p_page = udata.u_page;

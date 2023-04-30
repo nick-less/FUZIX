@@ -3,13 +3,13 @@ define lensympat __sectionlen_%s__
 section .start load 0x0000
 section .text
 section .text2
-section .const load 0xC000
+section .const
 section .data
 section .bss
 section .buffers
 section .discard
-section .commondata high 0xFB00
+section .udata load 0xF000
+section .commondata
 section .common
-section .udata load 0xFB00
 section .vectors load 0xFFF0
 entry start
