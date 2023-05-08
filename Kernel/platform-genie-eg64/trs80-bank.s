@@ -67,17 +67,13 @@ init_hardware:
 	
 	ld hl,#96
 	ld (_ramsize),hl
-	ld hl,#36
+	ld hl,#39
 	ld (_procmem),hl
         im 1 ; set CPU interrupt mode
 	jp _vt_check_lower
 ;
 ;	Mapping for us is fairly simple but it's not blank because we do
 ;	some mapping.
-;
-;	We could mark I/O unmapped except for GFX_MAP users and we could
-;	mark the low 16K R/O to protect it from user but then need to
-;	flip r/w on syscall and irq entry/exit.. FIXME.
 ;
 map_buffers:
 map_kernel:
