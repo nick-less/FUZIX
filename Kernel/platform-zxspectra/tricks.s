@@ -65,7 +65,7 @@ _plt_switchout:
 	;
 
 	; Stash the uarea back into process memory
-	ld a,	(_udata + U_DATA__U_PAGE2)
+	ld a, (_udata + U_DATA__U_PAGE)
 
 	; Macro as this depends on the clone
 	switch
@@ -108,10 +108,11 @@ _switchin:
         push	bc ; restore stack
 	push	hl ; far padding
 
-	push	de
         ld	hl, #P_TAB__P_PAGE_OFFSET
-	add	hl, de	; process ptr
-	pop	de
+ 	add	hl, de	; process ptr
+
+	;	HL now points to the pages for this process, DE to the
+	;	process
 	;
 	;	Get ourselves a valid private stack ASAP. We are going to
 	;	copy udata around and our main stacks are in udata
@@ -198,7 +199,7 @@ _switchin:
 	; Our pages are now consistent
 	;
 nowback:
-	; Turn this one once we have it all sorted and debugged
+	; Turn this on once we have it all sorted and debugged
 	xor	a
 ;	ld (_int_disabled),a
 	inc	a
@@ -225,12 +226,14 @@ nowback:
 	ld	(_inswap),a
 	; Remember the swapper set up the 6000-BFFF range for us
 	; and it is not clean so must be written back in future
+	inc	hl
+	inc	hl			; point to PAGE_2
 	ld	a,(hl)
 	ld	(_switchedbank),a
 	ld	a,#1
 	ld	(_switchedwb),a
-	inc	hl
-	inc	hl			; point to PAGE_2
+	dec	hl
+	dec	hl
 	;
 	; We differ from most here because if we swapped in we put the page
 	; at 8000-BFFF in the right place, if not we need to ldir it
@@ -241,8 +244,8 @@ nowback:
 	; Mark the writeback as dirty
 	;
 no_relocate_w:
-	inc hl
-	inc hl			; point to page2
+	dec hl
+	dec hl			; point to high page
 	jp no_relocate
 	;
 	; The non swap case. There are three basic variants
@@ -258,12 +261,14 @@ not_swapped:
 	; This means 6000-BFFF is wrong. However it might be wrong for a
 	; reason we don't care about (previous owned popped their clogs)
 	;
-	ld	a,(_switchedbank)
+	ld	a,(_switchedbank)	; current low page
+	inc	hl
+	inc	hl		; new low page
 
 	cp	(hl)		; is the page mapped low ours ?
 	jr	z,no_relocate_w
 
-	or	a
+	or	a		; is it dead ?
 	jr	z, no_copyback
 
 	;
@@ -329,8 +334,8 @@ not_swapped:
 	exx
 
 no_copyback:
-	ld	a,(hl)		; p->p_page
-	ld	(_switchedbank),a
+	ld	a,(hl)		; p->p_page2
+	ld	(_switchedbank),a	; What will be present in the bank
 
 	;
 	; Copy 6 x 4K from the spectranet RAM
@@ -384,26 +389,21 @@ no_copyback:
 	ld	bc,#0x013B
 	out	(c),a
 
-	ld	a,#0xC5		; C4 C5 C0
-	ld	bc,#0x013B
-	out	(c),a
-
 	exx
-
-	inc	hl
-	inc	hl
+	dec	hl
+	dec	hl
 	;
-	; Entered with HL = &page2
+	; Entered with HL = &page
 	;
 no_relocate:
 	ld	a,#1
-	ld	(_switchedwb),a
+	ld	(_switchedwb),a		; Writeback will be required
 
-	ld	a,(hl)	; p->p_page2
+	ld	a,(hl)	; p->p_page
 
 	ld	hl,(_udata + U_DATA__U_PTAB)
 	or	a
-	sbc	hl,de
+	sbc	hl,de			; valid udata ?
 	jr z,	skip_copyback
 
 	;	Pages please
@@ -531,13 +531,13 @@ _dofork:
         ; --------- copy process ---------
 
         ld	hl, (fork_proc_ptr)
-        ld	de, #P_TAB__P_PAGE2_OFFSET	;	bank number for high page
+        ld	de, #P_TAB__P_PAGE_OFFSET	;	bank number for high page
         add	hl, de
         ; load p_page for the high page
         ld	c, (hl)
 	push	hl
 
-	ld	hl, (_udata + U_DATA__U_PAGE + 2)
+	ld	hl, (_udata + U_DATA__U_PAGE)
 	ld	a, l
 
 	;
@@ -551,7 +551,7 @@ _dofork:
 	; the child inherits the existing 6000-BFFF and will in turn write
 	; it back when it gets switched out
 
-	ld	a,(_udata + U_DATA__U_PAGE)	;	low page of parent
+	ld	a,(_udata + U_DATA__U_PAGE2)	;	low page of parent
 
 	ld	bc,#0x013B
 	out	(c),a
@@ -605,16 +605,16 @@ _dofork:
 	; we made the child the owner
 
 	pop	hl
-	dec	hl
-	dec	hl			;	Child low page pointer
+	inc	hl
+	inc	hl			;	Child low page pointer
 	ld	a,(hl)
-	ld	(_switchedbank),a	; child bank (p->p_page)
+	ld	(_switchedbank),a	;	child bank (p->p_page2)
 	ld	a,#1
 	ld	(_switchedwb),a
 
 	; Copy done
 
-	ld a, (_udata + U_DATA__U_PAGE2)	; parent memory high
+	ld a, (_udata + U_DATA__U_PAGE)		; parent memory high
 
 	switch			; Switch context to parent in 0xC000+
 
