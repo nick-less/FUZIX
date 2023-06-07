@@ -12,12 +12,12 @@
 	    .export map_restore
 
 	    .export _unix_syscall_i
-	    .export _platform_interrupt_i
-	    .export platform_doexec
+	    .export _plt_interrupt_i
+	    .export plt_doexec
 
             ; exported debugging tools
-            .export _platform_monitor
-	    .export _platform_reboot
+            .export _plt_monitor
+	    .export _plt_reboot
             .export outchar
 	    .export ___hard_di
 	    .export ___hard_ei
@@ -36,12 +36,12 @@
 	    .import istack_switched_sp
 	    .import istack_top
 	    .import _unix_syscall
-	    .import _platform_interrupt
+	    .import _plt_interrupt
 	    .import _kernel_flag
 	    .import stash_zp
 	    .import pushax
 	    .import _chksigs
-	    .import _platform_switchout
+	    .import _plt_switchout
 	    .import _need_resched
 	    .import _relocator
 
@@ -54,7 +54,7 @@
             .include "kernel.def"
             .include "../kernel02.def"
 	    .include "zeropage.inc"
-CR0		  = $FFF0
+;CR0		  = $FFF0
 VIA		  = $E840
 IDE		  = $FF80
 ; -----------------------------------------------------------------------------
@@ -62,8 +62,8 @@ IDE		  = $FF80
 ; -----------------------------------------------------------------------------
             .segment "COMMONMEM"
 
-_platform_monitor:
-_platform_reboot:
+_plt_monitor:
+_plt_reboot:
 		lda #$FF
 		STA VIA+1
 	    lda #0
@@ -386,7 +386,7 @@ vector:
 	    ; us. Other stuff will run on a different low bank, and at some
 	    ; point we will return with S correct and on our 6502 and C
 	    ; stacks (we effectively have private IRQ stacks)
-	    jsr _platform_switchout
+	    jsr _plt_switchout
 	    ;
 	    ; Now return to the old state having woken back up
 	    ; Clear insys, move back onto the interrupt stack
@@ -619,7 +619,7 @@ syscout:
 
 	    rts
 
-platform_doexec:
+plt_doexec:
 ;
 ;	Start address of executable
 ;
@@ -662,8 +662,8 @@ platform_doexec:
 ;
 _unix_syscall_i:
 	    jmp _unix_syscall
-_platform_interrupt_i:
-	    jmp _platform_interrupt
+_plt_interrupt_i:
+	    jmp _plt_interrupt
 
 
 ;

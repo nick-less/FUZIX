@@ -25,7 +25,7 @@
  */
 #define MAX_MAPS 	2   /* 2 x 32K */
 #define MAP_SIZE    0x8000
-#define SWAPDEV hd0
+// #define SWAPDEV hd0
 
 #define TICKSPERSEC 60	    /* Ticks per second */
 
@@ -71,7 +71,7 @@ extern void *memmove(void *dest, const void *src, size_t n);
 
 #define VT_MAP_CHAR(x)  vt_map_petscii(x)
 
-#define platform_discard()
-#define platform_copyright() kputs("cbm 8296\r")
+#define plt_discard()
+#define plt_copyright() kputs("cbm 8296\r")
 
 #define BOOTDEVICENAMES "hd#"

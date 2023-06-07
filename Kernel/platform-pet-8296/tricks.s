@@ -1,21 +1,20 @@
 ;
 ;	6502 version
 ;
-	.export _platform_switchout
+	.export _plt_switchout
 	.export _switchin
 	.export _dofork
 	.export _ramtop
 	.export _create_init_common
 
 	.import _chksigs
-	.import _platform_monitor
+	.import _plt_monitor
 
 	.import map_kernel
 
 	.import	_makeproc
 	.import _getproc
 	.import _runticks
-	.import _inint
 	.import outstring
 	.import outxa
 	.import outcharhex
@@ -42,7 +41,7 @@ _ramtop:
 ; possibly the same process, and switches it in.  When a process is
 ; restarted after calling switchout, it thinks it has just returned
 ; from switchout().
-_platform_switchout:
+_plt_switchout:
 	sei
 
 ;
@@ -58,16 +57,12 @@ _platform_switchout:
 	tsx
 	stx _udata + U_DATA__U_SP	; Save it
 
-        ; set inint to false
-	lda #0
-	sta _inint
-
 	; find another process to run (may select this one again) returns it
 	; in x,a
 	jsr _getproc
 	jsr _switchin
 	; we should never get here
-	jsr _platform_monitor
+	jsr _plt_monitor
 
 badswitchmsg: .byte "_switchin: FAIL"
 	.byte 13, 10, 0
@@ -129,7 +124,7 @@ _switchin:
 	sta sp+1
 	pla
 	sta sp
-	LDA _inint
+	lda _udata + U_DATA__U_ININTERRUPT
 	beq swtchdone		; in ISR, leave interrupts off
 	cli
 swtchdone:
@@ -147,7 +142,7 @@ switchinfail:
 	ldx	#>badswitchmsg
         jsr outstring
 	; something went wrong and we didn't switch in what we asked for
-        jmp _platform_monitor
+        jmp _plt_monitor
 
 
 ;
