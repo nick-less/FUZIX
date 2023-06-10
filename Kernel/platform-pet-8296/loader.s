@@ -42,8 +42,9 @@ sector:	.res	1
 	.byte $65
 	.byte $02
 start:
-	; Map the full 64K to RAM
+	; set the full 64K to RAM
 	; enable ram_on AND ram_9 by setting via pa0, pa1 and pa2 to zero
+	; assume our IDE port does not care
 	SEI ; disable interrupts
 	lda VIA+3
 	ORA #7
@@ -51,9 +52,8 @@ start:
 	LDA VIA+1
 	AND #$F8
 	STA VIA+1
-	; set cr0 bits 7+6 to zero
-	LDA $3F
-	ORA CR0	
+	; set cr0  to zero
+	LDA $00
 	sta CR0
 	; now we should have ram except at $8000 and $FF00 - $FF3F 
 
