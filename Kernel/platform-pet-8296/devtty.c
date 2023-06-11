@@ -43,20 +43,12 @@ void kputchar(char c)
 	tty_putc(1, c);
 }
 
+
 unsigned char vt_map_petscii(unsigned char c)
 {
-
-	if ((c >= 'A') && (c<='Z')) {
-	 	return c + 32;
-	}
-	if ((c >= 'a') && (c<='z')) {
-	 	return c ;
-	}
-	if (c == 8) {
-		return 20;
-	}
-	if (c == 10) {
-		return 13;
+	// assume pet charst with case swaping fixed
+	if (c > 0x5F) {
+		return c-0x60;
 	}
 	return c;
 }
