@@ -5,6 +5,8 @@
 .globl _start
 _start:
 	# Wipe BSS.
+	# FIXME: should have been done by execve so this ought to be
+	# removable
 
 	ldr r0, =__bss_start
 	ldr r1, =__bss_end
