@@ -3,7 +3,7 @@
 ;	0000-7FFF are RAM 8000-FFFF ROM (except Video and I/O)
 ;
 ;	We switch to all RAM and then load an image from 0400-FDFF
-;	and then jump to 4002 if the marker is right
+;	and then jump to 0x0402 if the marker is right
 ;
 ;  0xFFF0 memory control byte
 ;  BIT 
@@ -19,7 +19,7 @@
 ; to read io enable i/o peek, to write i/o enable i/o peek and write protect $c000
 ; to read video enable video peek, to write video enable video peek AND write protect $8000
 ; 
-
+START = $9000
 ENABLE    = $80
 IO_PEEK   = $40
 VID_PEEK  = $20
@@ -34,7 +34,6 @@ chrout  = $FFD2
 
 	.zeropage
 ptr1:	.res	2
-ptr2:	.res	2
 sector:	.res	1
 
 	.segment "CODE"
@@ -57,10 +56,9 @@ start:
 	sta CR0
 	; now we should have ram except at $8000 and $FF00 - $FF3F 
 
-	LDA #$00
-	sta ptr2
+	LDA #$00	
 	sta ptr1
-	lda #$04
+	lda #$04	
 	sta ptr1+1
 
 	lda #$01	; 0 is the partition/boot block
@@ -101,19 +99,20 @@ bytes2:
 	jmp dread
 
 load_done:
-	lda $2000
+	lda START
 	cmp #$02
 	bne bad_load
-	lda $2001
+	lda START+1
 	cmp #$65
 	bne bad_load
 
-	jmp $2002
+	jmp START+2
 
 bad_load:
     ; enable rom
-	LDA #3
-	ORA VIA+3 
+	LDA #7
+	ORA VIA+1
+	STA VIA+1
 	; geht nicht weil alles gelöscht
 ;	ldx #>badimg
 ;	lda #<badimg

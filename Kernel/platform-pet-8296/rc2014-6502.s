@@ -65,10 +65,10 @@ IDE		  = $FF80
 _plt_monitor:
 _plt_reboot:
 		lda #$FF
-		STA VIA+1
+		STA VIA+1 	; enable roms 
 	    lda #0
-	    sta $FFF0		; disable exp ram, enable roms
-	    jmp ($FFFC)
+	    sta $FFF0	; disable exp ram
+	    jmp ($FFFC) ; jump to reset vector
 
 ___hard_di:
 	    php

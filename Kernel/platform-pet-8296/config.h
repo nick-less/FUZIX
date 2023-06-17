@@ -72,6 +72,6 @@ extern void *memmove(void *dest, const void *src, size_t n);
 #define VT_MAP_CHAR(x)  vt_map_petscii(x)
 
 #define plt_discard()
-#define plt_copyright() kputs("cbm 8296\r")
+#define plt_copyright() kputs("Commdore 8296 Version\r")
 
 #define BOOTDEVICENAMES "hd#"

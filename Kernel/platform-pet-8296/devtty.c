@@ -178,6 +178,7 @@ void update_keyboard(void)
 void tty_poll(void)
 {
 	uint8_t i;
+	return;
 
 	update_keyboard();
 
