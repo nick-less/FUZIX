@@ -1,6 +1,6 @@
 #include "../kernel-8085.def"
 ;
-;	8085 version of the DS1302 support for RC2014
+;	8085 version of the DS1302 support for RCbus
 ;
 
 #define RTCREG		0x0C
