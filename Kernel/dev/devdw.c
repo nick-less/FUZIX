@@ -62,7 +62,7 @@ static int dw_transfer(uint8_t minor, bool is_read, uint8_t rawflag)
                 dw_reset();
         }
         /* FIXME: should we try the other half and then bail out ? */
-        if (tries == 3)
+        if (tries == 4)
             goto bad;
         cmd[3]++;	/* Move on 256 bytes in the buffer */
         cmd[2]++;	/* Next sector for 2nd block */
@@ -112,6 +112,9 @@ int dw_ioctl(uint8_t minor, uarg_t request, char *data)
 	if (uget( data, &s, sizeof(struct dw_trans)))
 		return -1;
 
-	return dw_transaction(s.sbuf, s.sbufz, s.rbuf, s.rbufz, 1);
-	
+	if (dw_transaction(s.sbuf, s.sbufz, s.rbuf, s.rbufz, 1)) {
+		udata.u_error = EIO;
+		return -1;
+        }
+        return 0;
 }

@@ -8,6 +8,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <time.h>
+#include <errno.h>
 #include <sys/drivewire.h>
 
 
@@ -15,6 +16,7 @@ char *devname="/dev/dw0";
 
 static const uint16_t mktime_moffset[12]= { 0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334 };
 
+int silent = 0; /* silent I/O failure flag */
 
 static int printe( char *s ){
     write(2, s, strlen(s) );
@@ -55,6 +57,9 @@ static int get_time( uint8_t *tbuf )
     d.rbufz = 6;
     
     ret = ioctl( fd, DRIVEWIREC_TRANS, &d );
+    if (ret)
+        if (errno != EIO || !silent)
+            perror("drivewire");
     close( fd );
     return ret;
 }
@@ -84,6 +89,9 @@ int main( int argc, char *argv[] ){
 	    case 'd':
 		disflg = 1;
 		break;
+	    case 'q':
+		silent = 1;
+		break;
 	    case 'x':
 		devname = argv[++x];
 		if( ! devname ){
@@ -103,11 +111,8 @@ int main( int argc, char *argv[] ){
 	}
     }
 
-    x=get_time( buf );
-    if( x ){
-	perror("drivewire");
+    if (get_time(buf))
 	exit(1);
-    }
 
     /* figure out secs from epoc */
      
