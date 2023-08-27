@@ -19,7 +19,7 @@
 ; to read io enable i/o peek, to write i/o enable i/o peek and write protect $c000
 ; to read video enable video peek, to write video enable video peek AND write protect $8000
 ; 
-START = $9000
+START = $0800
 ENABLE    = $80
 IO_PEEK   = $40
 VID_PEEK  = $20
@@ -54,11 +54,11 @@ start:
 	; set cr0  to zero
 	LDA $00
 	sta CR0
-	; now we should have ram except at $8000 and $FF00 - $FF3F 
+	; now we should have ram except at $8000 and $FF80 - $FF8F 
 
 	LDA #$00	
 	sta ptr1
-	lda #$04	
+	lda #$08	
 	sta ptr1+1
 
 	lda #$01	; 0 is the partition/boot block
@@ -106,6 +106,12 @@ load_done:
 	cmp #$65
 	bne bad_load
 
+    ldx #$10
+@rep1:
+	lda $ff70,X
+	sta $fff0,x
+	dex 
+	bne @rep1
 	jmp START+2
 
 bad_load:

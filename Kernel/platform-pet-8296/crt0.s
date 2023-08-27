@@ -81,6 +81,6 @@ gogogo:
 stop:		jmp stop
 
 		.segment "VECTORS"
-		.addr	vector
-		.addr	entry		; does it matter ???
 		.addr	nmi_handler
+		.addr	entry		; does it matter ???
+		.addr	vector

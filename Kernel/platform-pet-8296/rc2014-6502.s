@@ -178,6 +178,8 @@ program_vectors_k:
 ;	ptr1 and tmp1 may be destroyed by these methods, but no other
 ;	temporaries.
 ;
+.byte $01
+.byte $65
 map_process_always:
 	    pha
 	    txa
