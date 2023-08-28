@@ -85,7 +85,7 @@
 # zxdiv:	ZX Spectrum 128K with DivIDE/DivMMC interface
 # zrc:		Bill Shen's Zrc platform
 
-TARGET=rc2014
+TARGET=pet-8296
 
 include version.mk
 
