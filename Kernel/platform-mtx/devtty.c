@@ -44,13 +44,13 @@ static uint8_t tmsinkpaper[5] = { 0, 0xF4 };
 static uint8_t tmsborder[5]  = {0, 0x04 };
 uint8_t vidmode;		/* mode of the moment */
 
-uint8_t inputtty;		/* input side */
+uint8_t inputtty = 1;		/* input side */
 uint8_t outputtty;		/* output side */
 static uint8_t vswitch;
 static uint8_t syscon = 1;	/* system console output */
 
 static uint16_t tty_present = 0xDF;	/* 2 serial, may be gap, 4 consoles, unused bit */
-static struct vt_switch ttysave[5];
+static struct vt_switch ttysave[6];	/* 0 unused */
 
 uint8_t prop80;			/* Propeller not a 6845 based 80 column interface */
 uint8_t has_6845;
@@ -104,7 +104,7 @@ tcflag_t termios_mask[NUM_DEV_TTY + 1] = {
  */
 static void set_output(uint_fast8_t minor)
 {
-	outputtty = minor - 1;
+	outputtty = minor;
 }
 
 /*
@@ -185,7 +185,7 @@ void vdp_attributes(void)
 static void vdp_restore(void)
 {
 	irqflags_t irq = di();
-	uint_fast8_t minor = inputtty + 1;
+	uint_fast8_t minor = inputtty;
 
 	vidmode = vmode[minor];
 	if (vidmode) {
@@ -241,9 +241,9 @@ void tty_putc(uint_fast8_t minor, uint_fast8_t c)
 			return;
 		/* Need a 'defer conswitch' to clean up the IRQ handling */
 		irq = di();
-		if (outputtty != minor - 1) {
+		if (outputtty != minor) {
 			vt_save(&ttysave[outputtty]);
-			set_output(minor - 1);
+			set_output(minor);
 			vt_load(&ttysave[outputtty]);
 		}
 		vtoutput(&c, 1);
@@ -499,11 +499,11 @@ static void keydecode(void)
 	if (c) {
 		switch (keyboard_grab) {
 		case 0:
-			vt_inproc(inputtty + 1, c);
+			vt_inproc(inputtty, c);
 			break;
 		case 1:
 			if (!input_match_meta(c)) {
-				vt_inproc(inputtty + 1, c);
+				vt_inproc(inputtty, c);
 				break;
 			}
 			/* Fall through */

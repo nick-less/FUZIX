@@ -19,12 +19,12 @@
         .area _GSINIT
         .area _GSFINAL
 	.area _DISCARD
+        .area _INITIALIZER
 	; We load the font into the VDP then it's discardable
 	.area _FONT
 	; and the common memory goes top
         .area _COMMONMEM
         .area _COMMONDATA
-        .area _INITIALIZER
 
         ; imported symbols
         .globl _fuzix_main
@@ -38,11 +38,11 @@
         .globl l__BUFFERS
         .globl s__DISCARD
         .globl l__DISCARD
+        .globl s__INITIALIZER
         .globl s__COMMONMEM
         .globl l__COMMONMEM
         .globl s__COMMONDATA
         .globl l__COMMONDATA
-        .globl s__INITIALIZER
 
         .globl kstack_top
 
@@ -67,10 +67,15 @@ init:
 	ld de, #s__FONT
 	ld bc, #l__FONT
 	ldir
-	; and the discard
+	; and the discard but do it backwards
 	ld de, #s__DISCARD
-	ld bc, #l__DISCARD
-	ldir
+	ld bc, #l__DISCARD-1
+	add hl,bc
+	ex de,hl
+	add hl,bc
+	ex de,hl
+	inc bc
+	lddr
 	; then zero the data area
 	ld hl, #s__DATA
 	ld de, #s__DATA + 1

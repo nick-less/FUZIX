@@ -14,8 +14,14 @@
 
 #ifdef CONFIG_TD_SD
 
+/* Byte or block oriented */
 uint_fast8_t sd_shift[CONFIG_TD_NUM];
+/* Turn a minor number into an sd device number */
+uint_fast8_t sd_dev[CONFIG_TD_NUM];
+/* Busy flag for bus sharing */
 uint8_t tinysd_busy;
+/* Current device (for simple setups always 0 and ignored) */
+uint8_t tinysd_unit;
 
 static uint_fast8_t sd_spi_wait(bool want_ff)
 {
@@ -68,8 +74,11 @@ static int sd_send_command(uint_fast8_t cmd, uint32_t arg)
 
 int sd_xfer(uint8_t dev, bool is_read, uint32_t lba, uint8_t * dptr)
 {
+	uint32_t block = lba << sd_shift[dev];
 	tinysd_busy = 1;
-	if (sd_send_command(is_read ? CMD17 : CMD24, lba << sd_shift[dev]))
+	tinysd_unit = sd_dev[dev];
+
+	if (sd_send_command(is_read ? CMD17 : CMD24, block))
 		goto error;
 	if (is_read) {
 		if (sd_spi_wait(false) != 0xFE)

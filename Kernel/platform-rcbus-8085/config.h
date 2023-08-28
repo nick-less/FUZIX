@@ -28,26 +28,38 @@
 #define TICKSPERSEC 10   /* Ticks per second */
 #define PROGBASE    0x0000  /* also data base */
 #define PROGLOAD    0x0100  /* also data base */
-#define PROGTOP     0xDE00  /* Top of program, base of U_DATA copy */
+#define PROGTOP     0xE000  /* Top of program, base of U_DATA */
 #define PROC_SIZE   60	  /* Memory needed per process */
 
 #define SWAPDEV     (swap_dev)	/* A variable for dynamic, or a device major/minor */
 
-#define SWAP_SIZE   0x70 	/* 56K in blocks (we actually don't need the low 256) */
+#define SWAP_SIZE   0x71 	/* 56K in blocks plus udata */
 #define SWAPBASE    0x0000	/* We swap the lot in one, include the */
-#define SWAPTOP	    0xE000	/* vectors so its a round number of sectors */
+#define SWAPTOP	    0xE200	/* vectors so its a round number of sectors */
 #define MAX_SWAPS   16		/* The full drive would actually be 85! */
 /* Swap will be set up when a suitably labelled partition is seen */
 #define CONFIG_DYNAMIC_SWAP
 
-#define CONFIG_IDE
-#define CONFIG_PPIDE
-#define MAX_BLKDEV 1	    /* One IDE */
+#define CONFIG_VT
+/*#define CONFIG_VT_MULTI
+#define MAX_VT	4 */
+#define VT_HEIGHT	24
+#define VT_BOTTOM	23
+#define VT_WIDTH	40	/* vt_twidth */
+#define VT_RIGHT	39	/* vt_tright */
+#define CONFIG_FONT6X8
+
+#define CONFIG_TINYDISK
+#define CONFIG_TD_NUM	4
+#define CONFIG_TD_IDE
+#define CONFIG_TINYIDE_INDIRECT
+#define CONFIG_TD_SCSI
 
 #define swap_map(x)	((uint8_t *)(x)) /* Simple zero based mapping */
 
 #define BOOT_TTY (512 + 1)/* Set this to default device for stdio, stderr */
                           /* In this case, the default is the first TTY device */
+#define TTY_INIT_BAUD B115200	/* Hardwired generally */
 
 #define CMDLINE	NULL	  /* Location of root dev name */
 

@@ -13,6 +13,12 @@ static uint8_t ide_present;
 
 static int ide_wait_op(uint8_t mask, uint8_t val)
 {
+	uint_fast8_t st = ide_read(status);
+	if (st == 0x00 || st == 0xFF) {
+		kputs(" - absent\n");
+		return -1;
+	}
+
 	while((ide_read(status) & mask) != val) {
 		if (timer_expired(giveup)) {
 			kputs(" - no response\n");
@@ -88,18 +94,28 @@ static void ide_identify(int dev, uint8_t *buf)
 	ide_present |= (1 << dev);
 }
 
+static void do_ide_register(uint8_t unit)
+{
+	ide_dev[unit] = td_next;
+	td_register(ide_xfer, 1);
+}
+
 void ide_probe(void)
 {
+	uint_fast8_t n;
 	uint8_t *buf = (uint8_t *)tmpbuf();
-	/* Issue an EDD if we can - timeout -> no drives */
-	/* Now issue an identify for each drive */
-	ide_identify(0, buf);
-	if (ide_present)
-		ide_identify(1, buf);
+	for (n = 0 ; n < TD_IDE_NUM; n++) {
+		ide_unit = n << 1;
+		/* Issue an EDD if we can - timeout -> no drives */
+		/* Now issue an identify for each drive */
+		ide_identify(0, buf);
+		if (ide_present)
+			ide_identify(1, buf);
+		if (ide_present & 1)
+			do_ide_register(ide_unit);
+		if (ide_present & 2)
+			do_ide_register(ide_unit + 1);
+	}
 	tmpfree(buf);
-	if (ide_present & 1)
-		ide_master = td_register(ide_xfer, 1);
-	if (ide_present & 2)
-		ide_slave = td_register(ide_xfer, 1);
 }
 #endif

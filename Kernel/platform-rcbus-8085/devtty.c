@@ -8,15 +8,23 @@
 #include <rcbus.h>
 
 static unsigned char tbuf1[TTYSIZ];
+static unsigned char tbuf2[TTYSIZ];
 
 struct  s_queue  ttyinq[NUM_DEV_TTY+1] = {       /* ttyinq[0] is never used */
     {   NULL,    NULL,    NULL,    0,        0,       0    },
     {   tbuf1,   tbuf1,   tbuf1,   TTYSIZ,   0,   TTYSIZ/2 },
+    {   tbuf2,   tbuf2,   tbuf2,   TTYSIZ,   0,   TTYSIZ/2 },
 };
 
 static uint_fast8_t acia_minor;
 static uint_fast8_t uart_minor;
 static uint_fast8_t num_uart;
+
+/* Mostly not used yet but needed by VDP code for multi console */
+uint8_t inputtty = 1;
+uint8_t outputtty = 1;
+uint8_t vtattr_cap;
+uint8_t vidmode;
 
 tcflag_t termios_mask[NUM_DEV_TTY + 1] = {
 	0,
@@ -67,12 +75,65 @@ static void calc_acia_setup(void)
 	acia_setup(r);
 }
 
+/*
+ *	16x50 conversion betwen a Bxxxx speed rate (see tty.h) and the values
+ *	to stuff into the chip.
+ */
+static const uint16_t clocks[] = {
+	12,		/* Not a real rate */
+	2304,
+	1536,
+	1047,
+	857,
+	768,
+	384,
+	192,
+	96,
+	48,
+	24,
+	12,
+	6,
+	3,
+	2,
+	1
+};
+
+static void calc_16x50_setup(void)
+{
+	uint8_t d;
+	uint16_t w;
+	struct termios *t = &ttydata[uart_minor].termios;
+
+	d = 0x80;	/* DLAB (so we can write the speed) */
+	d |= (t->c_cflag & CSIZE) >> 4;
+	if(t->c_cflag & CSTOPB)
+		d |= 0x04;
+	if (t->c_cflag & PARENB)
+		d |= 0x08;
+	if (!(t->c_cflag & PARODD))
+		d |= 0x10;
+	out(0xC3, d);	/* LCR */
+	w = clocks[t->c_cflag & CBAUD];
+	out(0XC0, w);		/* Set the DL */
+	out(0xC1, w >> 8);
+	if (w >> 8)	/* Low speeds interrupt every byte for latency */
+		out(0xC2, 0x00);
+	else		/* High speeds set our interrupt quite early
+			   as our latency is poor, turn on 64 byte if
+			   we have a 16C750 */
+		out(0xC2, 0x51);
+	out(0xC3, d & 0x7F);
+	/* FIXME: CTS/RTS support */
+	out(0xC4, 0x03); /* DTR RTS */
+	out(0xC1, 0x0D); /* We don't use tx ints */
+}
+
 void tty_setup(uint_fast8_t minor, uint_fast8_t flags)
 {
 	if (minor == acia_minor) {
 	  calc_acia_setup();
 	} else {
-  	  /* TODO */
+	  calc_16x50_setup();
 	}
 }
 
@@ -84,6 +145,10 @@ int tty_carrier(uint_fast8_t minor)
 
 void tty_putc(uint_fast8_t minor, uint_fast8_t c)
 {
+  uint8_t ch = c;
+  /* Shadow the first console on the TMS 9918A */
+  if (minor == 1 && tms9918a_present)
+	vtoutput(&ch, 1);
   if (minor == acia_minor)
     ttyout_acia(c);
   else
@@ -189,4 +254,12 @@ void rctty_init(void)
     uart_minor = ++num_uart;
     /* TODO: set up and termios mask */
   }
+}
+
+void do_beep(void)
+{
+}
+
+void cursor_disable(void)
+{
 }

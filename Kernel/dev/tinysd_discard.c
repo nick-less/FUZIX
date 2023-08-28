@@ -7,6 +7,7 @@
 #include <kernel.h>
 #include <tinydisk.h>
 #include <tinysd.h>
+#include <printf.h>
 
 #ifdef CONFIG_TD_SD
 
@@ -117,12 +118,13 @@ static uint8_t sd_try_init(void)
     return CT_SD1;
 }
 
-uint8_t sd_init(void)
+uint8_t sd_init(uint_fast8_t unit)
 {
     uint_fast8_t n = 0;
     uint8_t r;
 
     tinysd_busy = 1;
+    tinysd_unit = unit;
     sd_spi_slow();
 
     do {
@@ -132,4 +134,28 @@ uint8_t sd_init(void)
     tinysd_busy = 0;
     return r;
 }
+
+#ifdef TD_SD_NUM
+
+void sd_probe(void)
+{
+    uint_fast8_t n = 0;
+    int r;
+    uint_fast8_t t;
+
+    for (n = 0; n < TD_SD_NUM; n++) {
+        t = sd_init(n);
+        if (!(t & CT_BLOCK))
+            sd_shift[td_next] = 9;
+        if (t != CT_NONE) {
+            r = td_register(sd_xfer, 1);
+            if (r < 0)
+                continue;
+            sd_dev[r] = n;
+        }
+    }
+    kputchar('\r');
+}
+#endif
+
 #endif

@@ -35,28 +35,30 @@ static struct utmp ut;
 
 char buff[128];
 
-void doEcho( int f )
+static const unsigned char d_echo[3]={ 255, 253, 1 };
+static const unsigned char d_noecho[3]={ 255, 254, 1 };
+static const unsigned char d_willecho[3]={ 255, 251, 1 };
+static const unsigned char d_wontecho[3]={ 255, 252, 1 };
+
+void doEcho(int f)
 {
-	unsigned char e[3]={ 255, 253, 1 };
-	write( f, e, 3 );
+	write(f, d_echo, 3);
 }
 
-void dontEcho( int f )
+
+void dontEcho(int f)
 {
-	unsigned char e[3]={ 255, 254, 1 };
-	write( f, e, 3 );
+	write(f, d_noecho, 3);
 }
 
-void willEcho( int f )
+void willEcho(int f)
 {
-	unsigned char e[3]={ 255, 251, 1 };
-	write( f, e, 3 );
+	write(f, d_willecho, 3);
 }
 
-void wontEcho( int f )
+void wontEcho(int f)
 {
-	unsigned char e[3]={ 255, 252, 1 };
-	write( f, e, 3 );
+	write(f, d_wontecho, 3);
 }
 
 void getrply( int f )
@@ -101,7 +103,6 @@ static int envn;
 static void envset(const char *a, const char *b)
 {
 	int al = strlen(a);
-	static char hptr[5];
 	/* May unalign the memory pool but we don't care by this point */
 	char *tp = sbrk(al + strlen(b) + 2);
 	if (tp == (char *) -1) {
@@ -307,8 +308,6 @@ int main( int argc, char *argv[])
 	int len;
 	char c[2];
 
-
-
 	if( argc<3){
 		pute("usage: dwgetty tty port\n" );
 		exit(-1);
@@ -336,14 +335,14 @@ int main( int argc, char *argv[])
 	write(f,"\r",1);
 
 	for( i=0; i<4; i++){
-		len=read(f,buff,128);
+		read(f,buff,128);
 	}
 	conn=buff[0];
 
 	write(f, join, strlen(join) );
 	write(f, &conn, 1 );
 	write(f, "\r", 1 );
-	len=read(f,buff,128);
+	read(f,buff,128);
 
        	new.c_iflag |= IGNCR;
 	tcsetattr( f, TCSANOW,  &new );
@@ -351,5 +350,3 @@ int main( int argc, char *argv[])
 	c[1]=argv[1][strlen(argv[1])-1];
 	getty( argv[1], c, f );
 }
-
-

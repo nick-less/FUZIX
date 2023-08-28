@@ -3,15 +3,15 @@ include $(FUZIX_ROOT)/Applications/rules.$(USERCPU)
 SRCS  = dw.c dwgetty.c dwterm.c dwdate.c
 
 OBJS = $(SRCS:.c=.o)
-
 APPS = $(OBJS:.o=)
 
 all: $(APPS) size.report
 
-$(APPS): $(CRT0)
+$(OBJS): %.o : %.c
+	$(CC) -c $(CFLAGS) $(COPT) $<
 
-$(APPS) $(APPSNS): %: %.o
-	$(LINKER) $^ -o $@ $(LINKER_OPT) $(LINKER_TAIL)
+$(APPS): %: %.o
+	$(LINKER) $(CRT0) $^ -o $@ $(LINKER_OPT) $(LINKER_TAIL)
 
 size.report: $(APPS)
 	ls -l $^ > $@
@@ -21,3 +21,4 @@ clean:
 
 rmbak:
 	rm -f *~ core
+

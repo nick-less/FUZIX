@@ -4,7 +4,7 @@
 # Useful values for general work
 #
 # 2063:		John Winans Z80 Retro system
-# 68K-nano:	A small retrobrew 68000 platform with IDE disk
+# 68Knano:	A small retrobrew 68000 platform with IDE disk
 # amprolb:	The legendary Ampro Littleboard
 # amstradnc/nc100:	Amstrad NC100 (or emulator)
 # amstradnc/nc200:	Amstrad NC200 (or emulator)
@@ -14,7 +14,6 @@
 # cpm22:	Designed for S.100 and similar setups. Uses BIOS plus Z80
 #		customisations
 # cromemco:	Cromemco with banked memory
-# dk-tm4c129x:	Texas Instruments Tiva C Series Development Board
 # dragon-mooh:	Dragon 32/64 with Mooh 512K card (or xroar emulator)
 # dragon-nx32:	Dragon 32/64 with Spinx 512K card (or xroar emulator)
 # dyno:		Z180 based platform using RomWBW
@@ -32,6 +31,7 @@
 # mtx:		Memotech MTX512 with SDX or SD (or MEMU emulator)
 # multicomp09:	Extended multicomp 6809
 # n8:		Retrobrew N8 home computer
+# nascom:	Nascom 2 or 3 with page mode RAM and CF on PIO
 # p112:		DX Designs P112
 # pcw8256:	Amstrad PCW series
 # pentagon:	Pentagon (spectrum not quite clone)
@@ -47,6 +47,7 @@
 # rcbus-6809:	RCBUS with 6809 CPU card
 # rcbus-68hc11:	RCBUS wiht 68HC11 CPU
 # rcbus-8085:	RCBUs with 80C85 CPU and 8/56K memory banking
+# rcbus-ns32k:   RCBus with NS32K CPU
 # rcbus-sbc64:  RCBUS Z80SBC64 128K system and RTC
 # rcbus-z180:	RCBUS Z180 systems running in Z180 mode (includes SC126 etc)
 # rhyophyre:	Andrew Lynch's rhyohphre Z180/NEC7220 graphics
@@ -57,6 +58,7 @@
 # sbcv2:	RBC/N8VEM SBC v2
 # sc108:	Small Computer Central SC108 and SC114 systems
 # sc111:	Small Computer Central SC111 system
+# sc720:	Small Computer Central SC720 system
 # scorpion:	Scorpion 256K (and some relatives) with NemoIDE
 # scrumpel:	Scrumpel Z180 system
 # searle:	Searle Z80 system with modified ROM and a timer added
@@ -65,6 +67,7 @@
 # socz80:	Will Sowerbutt's FPGA SocZ80 or extended version
 # tc2068:	Timex TC2068/TS2068 with DivIDE/DivMMC disk interface
 # tiny68k:	Bill Shen's Tiny68K or T68KRC
+# tm4c129x:	Texas Instruments Tiva C Series Boards
 # to8:		Thomson TO8/TO9+
 # tomssbc:	Tom's SBC running in RAM
 # tomssbc-rom:	Tom's SBC using the 4x16K banked ROM for the kernel
@@ -81,9 +84,9 @@
 # z80retro:	Peter Wilson's Z80Retro
 # z80pack:	Z80Pack virtual Z80 platform
 # zeta-v2:	Zeta v2 retrobrew SBC (for Zeta V1 see sbcv2)
+# zrc:		Bill Shen's Zrc platform
 # zx+3:		ZX Spectrum +3
 # zxdiv:	ZX Spectrum 128K with DivIDE/DivMMC interface
-# zrc:		Bill Shen's Zrc platform
 
 TARGET=pet-8296
 
