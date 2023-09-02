@@ -1,14 +1,21 @@
 ;
-;	Low level platform support for rcbus-8080
+;	Low level platform support for rcbus-8085
 ;
 
-	#include "../kernel-8080.def"
+	#include "../kernel-8085.def"
 
 #define ACIA_RESET	0x03
 #define ACIA_RTS_LOW	0x96
 
-	.setcpu 8080
+	.setcpu 8085
 	.common
+
+.export bankid
+
+	; This is filled in at boot in each bank with the bank id for
+	; this common + kernel map
+bankid:
+	.byte 0
 
 .export _plt_monitor
 .export _plt_reboot
@@ -100,10 +107,9 @@ tmswait:
 	;
 	;	Turn interrupts on
 	;
-	mvi a,0xF0
-	out 0x99
-	mvi a,0x81
-	out 0x99
+	call _vdp_init
+	call _vdp_load_font
+	call _vdp_restore_font
 	jmp uart_config
 	;
 	;	We still need a clock. Pray we have a 82C54 card at 0x3C
@@ -215,12 +221,8 @@ _int_disabled:
 
 _program_vectors:
 	di
-	lxi h,2
-	dad sp
-	mov e,m
-	inx h
-	mov d,m
-	xchg
+	ldsi 2
+	lhlx
 	call map_proc
 	call _program_uvectors
 	call map_kernel_di
@@ -228,23 +230,59 @@ _program_vectors:
 
 _program_kvectors:
 ;
-;	All the interrupts are wired to 0xFF (RST 7)
+;	The 8085 has some vectors of its own
+;	0x24 is NMI
+;	0x2C/0x34/0x3C are vectored interrupts
+;	This also means we need a customised .rst handler to leave room for
+;	NMI and RST 5.5 ideally.
+;
+;	All the interrupts are wired to RST 6.5
 ;
 _program_uvectors:
 	mvi a,0xc3
 	sta 0
 	lxi h,null_handler
 	shld 1
-	; If we are booting 8080 on 8085 board we will get 8085 interrupts
+;
+;	FIXME: rst code fouls NMI
+;
+;	sta 0x24
+;	lxi h,nmi_handler
+;	shld 0x25
+	sta 0x30
+	lxi h,unix_syscall_entry
+	shld 0x31
+;
+;	We use RST 6.5, this is correct for the EP 80C85 board. The original
+;	8085 design used INT which doesn't work as 8085 INT requires a
+;	vector, so the board needs a wire mod
+;
 	sta 0x34
 	lxi h,interrupt_handler
 	shld 0x35
-	; On the (currently imaginary) 8080 board we'd get 0x38 so do both
+	;
+	;	Just in case
+	;
+	lxi h,unexpected
+;	sta 0x2C
+;	shld 0x2D
 	sta 0x38
-	lxi h,interrupt_handler
 	shld 0x39
+	sta 0x3c
+	shld 0x3d
 	ret
 
+unexpected:
+	lxi h,unexpect
+	call outstring
+	ei
+	ret
+
+unexpect:
+	.ascii '[unexpected irq]'
+	.byte 10,0
+
+;
 ;	Memory mapping
 ;
 .export map_kernel
@@ -254,9 +292,17 @@ map_kernel:
 map_kernel_di:
 map_buffers:
 	push psw
-	mvi a,3
-	sta curmap
+	lda bankid		; Get the ID of the current common bank
+kmap:
+	DI
 	out 0xFF
+	sta curmap
+	; Can check this as we are in kernel mapping
+	lda _int_disabled
+	ora a
+	jnz no_ei
+	EI
+no_ei:
 	pop psw
 	ret
 
@@ -273,8 +319,9 @@ map_proc_di:
 	mov a,m
 map_for_swap:
 map_proc_a:
+	; Save map into kernel map (our map was kernel if this is called)
 	sta curmap
-	out 0xFF
+	out 0xFF		; No race risk this direction
 	ret
 
 .export map_proc_always
@@ -285,32 +332,49 @@ map_proc_always_di:
 	push psw
 	lda U_DATA__U_PAGE
 setmap:
-	sta curmap
+	sta curmap		; As with map_proc
 	out 0xFF
 	pop psw
 	ret
 
 .export map_save_kernel
 
+; Only called during an interrupt
 map_save_kernel:
 	push psw
+	lda bankid
+	out 0xFF		; into kernel bank
 	lda curmap
-	sta map_save
-	mvi a,3
-	jmp setmap
+	sta map_save		; save the old mapo
+	lda bankid
+	sta curmap		; save the new map correctly
+	pop psw
+	ret
 
 .export map_restore
 
+; We are always returning from kernel in this case.
 map_restore:
 	push psw
-	lda map_save
-	jmp setmap
+	lda map_save		; We have kenrel mapped
+	sta curmap
+	out 0xFF		; No race
+	pop psw
+	ret
+
+
+; We keep these in the kernel map
+
+	.data
+
+.export curmap
 
 map_save:
 	.byte 0
 curmap:
 	.byte 1
 
+	.code
 
 .export outchar
 .export _ttyout_uart
@@ -320,9 +384,8 @@ curmap:
 ;	16550A UART for now with outchar debug (FIXME: pick from probe)
 ;
 _ttyout_uart:
-	lxi h,2
-	dad sp
-	mov a,m
+	ldsi 2
+	ldax d
 outchar:
 	push psw
 outcharw:
@@ -334,9 +397,8 @@ outcharw:
 	ret
 
 _ttyout_acia:
-	lxi h,2
-	dad sp
-	mov a,m
+	ldsi 2
+	ldax d
 	out 0xA1
 	ret
 
@@ -389,9 +451,8 @@ _uart_setup:
 .export _acia_setup
 
 _acia_setup:
-	lxi h,2
-	dad sp
-	mov a,m
+	ldsi 2
+	ldax d
 	out 0xA0
 	ret
 
@@ -554,3 +615,4 @@ wblock:
 	jnz wblock
 	pop b
 	jmp map_kernel
+
