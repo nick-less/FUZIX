@@ -21,6 +21,7 @@
 
 #include <kernel.h>
 #include <tinydisk.h>
+#include <printf.h>
 #include "ch375.h"
 
 static uint8_t ch_ver;
@@ -99,7 +100,6 @@ static int ch375_xfer(uint_fast8_t dev, bool is_read, uint32_t lba, uint8_t *dpt
         } else {
             if (r != 0x1E)
                 return 0;
-            /* FIXME: again ch376 is what ? */
             ch375_wcmd(ch_wd);
             ch375_wdata(0x40);	/* Send write count */
             ch375_wblock(dptr);
@@ -124,7 +124,7 @@ uint_fast8_t ch375_probe(void)
     ch375_cmd2(0x06, 0x55);
     r = ch375_rdata();
     if (r != 0xAA) {
-        kprintf("ch375: response %2x not AA\n", r);
+/*        kprintf("ch375: response %2x not AA\n", r); */
         return 0;
     }
     ch375_wcmd(0x01);	/* Version */
@@ -158,6 +158,6 @@ uint_fast8_t ch375_probe(void)
     if (r != 0x14)
         return 0;
     /* And done */
-    ch_dev = td_register(ch375_xfer, 1);
+    ch_dev = td_register(0, ch375_xfer, td_ioctl_none, 1);
     return 1;
 }

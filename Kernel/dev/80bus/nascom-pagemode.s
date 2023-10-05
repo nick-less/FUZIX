@@ -9,11 +9,11 @@
 	    .globl map_kernel
 	    .globl map_kernel_di
 	    .globl map_kernel_restore
-	    .globl map_process
-	    .globl map_process_di
-	    .globl map_process_a
-	    .globl map_process_always
-	    .globl map_process_always_di
+	    .globl map_proc
+	    .globl map_proc_di
+	    .globl map_proc_a
+	    .globl map_proc_always
+	    .globl map_proc_always_di
 	    .globl map_save_kernel
 	    .globl map_restore
 	    .globl map_for_swap
@@ -25,6 +25,8 @@
             .globl _ramsize
             .globl _procmem
 	    .globl _bankmap
+
+	    .globl ___sdcc_enter_ix
 
 	    .globl s__COMMONMEM
 	    .globl l__COMMONMEM
@@ -127,6 +129,11 @@ init_hardware:
 	    push hl
 	    call _program_vectors
 	    pop af
+	    ; RST helpers
+	    ld hl,#rstblock
+	    ld de,#8
+	    ld bc,#32
+	    ldir
 	    ; FIXME: interrupt mode is per port target ?
             ret
 
@@ -160,20 +167,20 @@ map_buffers:
 ;
 ;	Do the page mode switch
 ;
-map_process:
-map_process_di:
+map_proc:
+map_proc_di:
 	    ld a, h
 	    or l
 	    jr z, map_kernel
 	    ld a, (hl)
 map_for_swap:
-map_process_a:			; used by bankfork
+map_proc_a:			; used by bankfork
 	    ld (pagereg),a
 	    out (0xFF),a
 	    ret
 
-map_process_always:
-map_process_always_di:
+map_proc_always:
+map_proc_always_di:
 	    push af
 	    push hl
 	    ld hl, #_udata + U_DATA__U_PAGE
@@ -201,3 +208,36 @@ map_restore:
 	    out (0xFF), a
 	    pop af
 	    ret
+
+;
+;	Stub helpers for code compactness. Note that
+;	sdcc_enter_ix is in the standard compiler support already
+;
+	.area _DISCARD
+
+;
+;	The first two use an rst as a jump. In the reload sp case we don't
+;	have to care. In the pop ix case for the function end we need to
+;	drop the spare frame first, but we know that af contents don't
+;	matter
+;
+
+rstblock:
+	jp	___sdcc_enter_ix
+	.ds	5
+___spixret:
+	ld	sp,ix
+	pop	ix
+	ret
+	.ds	3
+___ixret:
+	pop	af
+	pop	ix
+	ret
+	.ds	4
+___ldhlhl:
+	ld	a,(hl)
+	inc	hl
+	ld	h,(hl)
+	ld	l,a
+	ret

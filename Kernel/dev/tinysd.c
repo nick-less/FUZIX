@@ -16,8 +16,6 @@
 
 /* Byte or block oriented */
 uint_fast8_t sd_shift[CONFIG_TD_NUM];
-/* Turn a minor number into an sd device number */
-uint_fast8_t sd_dev[CONFIG_TD_NUM];
 /* Busy flag for bus sharing */
 uint8_t tinysd_busy;
 /* Current device (for simple setups always 0 and ignored) */
@@ -63,7 +61,9 @@ static int sd_send_command(uint_fast8_t cmd, uint32_t arg)
 	sd_spi_transmit_byte(arg);
 #endif
 	sd_spi_transmit_byte(0x01);
+#ifndef CONFIG_TD_SD_EMUBUG        
 	sd_spi_receive_byte();
+#endif
 	n = 20;
 	do {
 		res = sd_spi_receive_byte();
@@ -76,7 +76,7 @@ int sd_xfer(uint8_t dev, bool is_read, uint32_t lba, uint8_t * dptr)
 {
 	uint32_t block = lba << sd_shift[dev];
 	tinysd_busy = 1;
-	tinysd_unit = sd_dev[dev];
+	tinysd_unit = dev;
 
 	if (sd_send_command(is_read ? CMD17 : CMD24, block))
 		goto error;

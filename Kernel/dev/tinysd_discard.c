@@ -37,7 +37,9 @@ static uint8_t sendcmd(uint8_t *cmd)
     n = 0;
     while(++n <= 6)
         sd_spi_transmit_byte(*cmd++);
+#ifndef CONFIG_TD_SD_EMUBUG        
     sd_spi_receive_byte();
+#endif
     n = 0xA0;
     while(++n) {
         r = sd_spi_receive_byte();
@@ -146,12 +148,11 @@ void sd_probe(void)
     for (n = 0; n < TD_SD_NUM; n++) {
         t = sd_init(n);
         if (!(t & CT_BLOCK))
-            sd_shift[td_next] = 9;
+            sd_shift[n] = 9;
         if (t != CT_NONE) {
-            r = td_register(sd_xfer, 1);
+            r = td_register(n, sd_xfer, td_ioctl_none, 1);
             if (r < 0)
                 continue;
-            sd_dev[r] = n;
         }
     }
     kputchar('\r');
