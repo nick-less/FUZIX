@@ -415,7 +415,7 @@ int row, col;
    careful on comparisons */
 size_t indexp, page, epage;
 int input;
-int repeat;
+int repeat = -1;
 char *buf;
 char *ebuf;
 char *gap;
@@ -1475,7 +1475,7 @@ void adjust_dirty(int n)
 
 void dirty_all(void)
 {
-	memset(dirty, 255, MAX_HEIGHT);
+	memset(dirty, 0, MAX_HEIGHT);
 	dirtyn = 1;
 }
 

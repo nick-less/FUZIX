@@ -259,7 +259,7 @@ void gen_segment(unsigned segment)
 
 /* Generate the function prologue - may want to defer this until
    gen_frame for the most part */
-void gen_prologue(const char *name)
+void gen_prologue(const char *name, unsigned aframe)
 {
 	printf("_%s:\n", name);
 }
@@ -295,7 +295,7 @@ void gen_frame(unsigned size)
 	}
 }
 
-void gen_epilogue(unsigned size)
+void gen_epilogue(unsigned size, unsigned argsize)
 {
 	if (sp != 0)
 		error("sp");
