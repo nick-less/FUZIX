@@ -13,8 +13,8 @@ static char tbuf2[TTYSIZ];
 
 struct vt_repeat keyrepeat;
 
-__sfr __at 0x01 s6402_data;
-__sfr __at 0x02 s6402_status;
+#define	s6402_data	0x01
+#define s6402_status	0x02
 
 struct s_queue ttyinq[NUM_DEV_TTY + 1] = {	/* ttyinq[0] is never used */
 	{NULL, NULL, NULL, 0, 0, 0},
@@ -29,55 +29,57 @@ tcflag_t termios_mask[NUM_DEV_TTY + 1] = {
 };
 
 /* Write to system console */
-void kputchar(char c)
+void kputchar(uint_fast8_t c)
 {
 	if (c == '\n')
 		tty_putc(1, '\r');
 	tty_putc(1, c);
 }
 
-ttyready_t tty_writeready(uint8_t minor)
+ttyready_t tty_writeready(uint_fast8_t minor)
 {
-	uint8_t reg;
+	uint_fast8_t reg;
 	if (minor == 1)
 		return TTY_READY_NOW;
-	reg = s6402_status;
+	reg = in(s6402_status);
 	return (reg & 0x40) ? TTY_READY_NOW : TTY_READY_SOON;
 }
 
-void tty_putc(uint8_t minor, unsigned char c)
+void tty_putc(uint_fast8_t minor, uint_fast8_t c)
 {
 	if (minor == 2)
-		s6402_data = c;
-	else
-		vtoutput(&c, 1);
+		out(s6402_data, c);
+	else {
+		uint8_t ch = c;
+		vtoutput(&ch, 1);
+	}
 }
 
 void tty_poll(void)
 {
-	uint8_t reg = s6402_status;
+	uint_fast8_t reg = in(s6402_status);
 	if (reg & 0x80) {
-		reg = s6402_data;
+		reg = in(s6402_data);
 		tty_inproc(2, reg);
 	}
 }
 
-void tty_setup(uint8_t minor, uint8_t flags)
+void tty_setup(uint_fast8_t minor, uint_fast8_t flags)
 {
 	/* The console is a crt/keyboard, the 6402 is set by jumpers */
 }
 
-int tty_carrier(uint8_t minor)
+int tty_carrier(uint_fast8_t minor)
 {
 	return 1;
 }
 
-void tty_sleeping(uint8_t minor)
+void tty_sleeping(uint_fast8_t minor)
 {
 	used(minor);
 }
 
-void tty_data_consumed(uint8_t minor)
+void tty_data_consumed(uint_fast8_t minor)
 {
 	used(minor);
 }
@@ -91,23 +93,23 @@ static uint8_t shiftmask[9] = {
 	0, 0, 0, 0, 0, 0, 0, 0, 24
 };
 
-__sfr __at 0 kbd_data;
+#define kbd_data	0
 
 static void keyproc(void)
 {
-	int i;
-	uint8_t key;
+	register int i;
+	uint_fast8_t key;
 
-	kbd_data = 2;		/* Reset the keyboard */
+	out(kbd_data, 2);	/* Reset the keyboard */
 
 	for (i = 0; i < 9; i++) {
 		/* Read the keyboard row */
-		keyin[i] = ~kbd_data & 0x7F;
-		kbd_data = 1;	/* Clock the keyboard */
+		keyin[i] = ~in(kbd_data) & 0x7F;
+		out(kbd_data, 1);	/* Clock the keyboard */
 		key = keyin[i] ^ keymap[i];
 		if (key) {
-			uint8_t n;
-			uint8_t m = 1;
+			uint_fast8_t n;
+			uint_fast8_t m = 1;
 			for (n = 0; n < 8; n++) {
 				if ((key & m) && (keymap[i] & m)) {
 					if (!(shiftmask[i] & m))
@@ -179,9 +181,9 @@ static uint8_t kbd_timer;
 
 static void keydecode(void)
 {
-	uint8_t c;
-	uint8_t m = 0;
-	uint8_t shift = 0;
+	register uint_fast8_t c;
+	uint_fast8_t m = 0;
+	uint_fast8_t shift = 0;
 
 	if ((keymap[8] & 0x20) || (keymap[0] & 0x10)) {	/* shift */
 		c = shiftkeyboard[keybyte][keybit];

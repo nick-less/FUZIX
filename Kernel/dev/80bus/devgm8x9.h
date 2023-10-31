@@ -2,17 +2,17 @@
 #define __DEVFD_DOT_H__
 
 /* public interface */
-int gm8x9_read(uint8_t minor, uint8_t rawflag, uint8_t flag);
-int gm8x9_write(uint8_t minor, uint8_t rawflag, uint8_t flag);
-int gm8x9_open(uint8_t minor, uint16_t flag);
+int gm8x9_read(uint_fast8_t minor, uint_fast8_t rawflag, uint_fast8_t flag);
+int gm8x9_write(uint_fast8_t minor, uint_fast8_t rawflag, uint_fast8_t flag);
+int gm8x9_open(uint_fast8_t minor, uint16_t flag);
 
 /* low level interface */
-uint8_t gm8x9_seek(uint8_t track) __z88dk_fastcall;
+uint8_t gm8x9_seek(uint8_t track);
 uint8_t gm8x9_restore(void);
 uint8_t gm8x9_restore_test(void);
 uint8_t gm8x9_reset(void);
-uint8_t gm8x9_ioread(uint8_t *dptr) __z88dk_fastcall;
-uint8_t gm8x9_iowrite(uint8_t *dptr) __z88dk_fastcall;
+uint8_t gm8x9_ioread(uint8_t *dptr);
+uint8_t gm8x9_iowrite(uint8_t *dptr);
 
 #define MAX_GMFD		16
 #define MAX_SKEW		32
