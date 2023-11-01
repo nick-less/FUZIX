@@ -12,6 +12,7 @@ uint8_t need_resched = 0;
 
 void plt_discard(void)
 {
+	return;
 	while (bufpool_end < (struct blkbuf *) (KERNTOP - sizeof(struct blkbuf))) {
 		memset(bufpool_end, 0, sizeof(struct blkbuf));
 #if BF_FREE != 0
@@ -23,12 +24,7 @@ void plt_discard(void)
 	kprintf("Buffers available: %d\n", bufpool_end - bufpool);
 }
 
-void plt_idle(void)
-{
-	__asm halt __endasm;
-}
-
-uint8_t plt_param(unsigned char *p)
+uint_fast8_t plt_param(unsigned char *p)
 {
 	used(p);
 	return 0;
