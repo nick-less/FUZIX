@@ -70,7 +70,7 @@ start:
 dread:
 	jsr waitready
 	lda sector
-	cmp #$7D	; loaded all of the image ?
+	cmp #$7C	; loaded all of the image ?
 	beq load_done
 	inc sector
 	sta IDE+3
@@ -82,7 +82,6 @@ dread:
 
 	jsr waitdrq
 
-	lda ptr1+1	; skip the I/O page
 	ldy #0
 bytes1:
 	lda IDE
@@ -106,9 +105,12 @@ load_done:
 	cmp #$65
 	bne bad_load
 
+; we cant overwrite the ide registers and only load multiples of 512, 
+; so stop at fe00 and copy 0x10 bytes from fdf0 byte
+; to the vector table
     ldx #$10
 @rep1:
-	lda $ff70,X
+	lda $fdf0,X
 	sta $fff0,x
 	dex 
 	bne @rep1

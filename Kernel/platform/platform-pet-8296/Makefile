@@ -10,8 +10,8 @@ DISCARD_DSRCS = ../../dev/mbr.c ../../dev/devide_discard.c
 
 COBJS = $(CSRCS:.c=$(BINEXT))
 AOBJS = $(ASRCS:.s=$(BINEXT))
-DOBJS = $(patsubst ../dev/%.c,%.o, $(DSRCS))
-DISCARD_DOBJS = $(patsubst ../dev/%.c,%.o, $(DISCARD_DSRCS))
+DOBJS = $(patsubst ../../dev/%.c,%.o, $(DSRCS))
+DISCARD_DOBJS = $(patsubst ../../dev/%.c,%.o, $(DISCARD_DSRCS))
 
 OBJS  = $(COBJS) $(AOBJS) $(DOBJS) $(DISCARD_DOBJS)
 
@@ -37,15 +37,15 @@ clean:
 	rm -f $(OBJS) *.o core *~ fuzix.img fuzix.bin
 
 image:
-	$(CROSS_LD) -o ../fuzix.bin --mapfile ../fuzix.map -C ld65.cfg crt0.o commonmem.o \
-	rc2014-6502.o ../../start.o ../../version.o ../../lowlevel-6502.o \
-	tricks.o main.o ../../timer.o ../../kdata.o devices.o ../../vt.o \
+	$(CROSS_LD) -o ../fuzix.bin --mapfile ../../fuzix.map -C ld65.cfg crt0.o commonmem.o \
+	rc2014-6502.o ../../start.o ../../version.o ../../cpu-6502/lowlevel-6502.o \
+	tricks.o main.o ../../timer.o ../../kdata.o devices.o ../../mm/memalloc_none.o ../../vt.o \
 	../../blk512.o blkdev.o mbr.o devide.o devide_discard.o  \
 	../../devio.o ../../filesys.o ../../process.o ../../inode.o ../../syscall_fs.o \
-	../../syscall_proc.o ../../syscall_other.o ../../mm.o ../../bankfixed.o \
+	../../syscall_proc.o ../../syscall_other.o ../../mm.o ../../mm/bankfixed.o \
 	../../tty.o ../../devsys.o ../../syscall_fs2.o ../../syscall_fs3.o \
 	../../syscall_exec16.o ../../syscall_exec.o \
-	../../usermem.o ../../usermem_std-6502.o devtty.o
+	../../usermem.o ../../cpu-6502/usermem_std-6502.o devtty.o
 	dd if=../fuzix.bin of=fuzix.img bs=256 skip=4 
 
 loader: loader.o

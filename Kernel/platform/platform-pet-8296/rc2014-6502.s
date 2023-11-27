@@ -7,7 +7,7 @@
             .export _program_vectors
 	    .export map_kernel
 	    .export map_process
-	    .export map_process_always
+	    .export map_proc_always
 	    .export map_save_kernel
 	    .export map_restore
 
@@ -52,7 +52,7 @@
 	    .import _create_init_common
 
             .include "kernel.def"
-            .include "../kernel02.def"
+            .include "../../cpu-6502/kernel02.def"
 	    .include "zeropage.inc"
 ;CR0		  = $FFF0
 VIA		  = $E840
@@ -156,7 +156,7 @@ program_vectors_k:
 ;
 ;	On a banked setup the semantics are:
 ;
-;	map_process_always()
+;	map_proc_always()
 ;	Map the current process (ie the one with the live uarea)
 ;
 ;	map_kernel()
@@ -180,7 +180,7 @@ program_vectors_k:
 ;
 .byte $01
 .byte $65
-map_process_always:
+map_proc_always:
 	    pha
 	    txa
 	    pha
@@ -315,6 +315,7 @@ outchar:
 ;	we can use the shorter one for the CMOS chip
 ;
 vector:
+		rti
 	    pha
 	    txa
 	    pha
@@ -676,7 +677,7 @@ _plt_interrupt_i:
 ;
 ;	Uses ptr3/4 as 1/2 are reserved for the mappers
 ;
-;	FIXME: map_process_always doesn't map the low 16K for 6502 so we
+;	FIXME: map_proc_always doesn't map the low 16K for 6502 so we
 ;	have more work to do here to support swap.
 ;
 
@@ -692,7 +693,7 @@ _hd_read_data:
 	;
 	lda _hd_map
 	beq hd_kmap
-	jsr map_process_always
+	jsr map_proc_always
 hd_kmap:
 	ldy #0
 	jsr hd_read256
@@ -718,7 +719,7 @@ _hd_write_data:
 	;
 	lda _hd_map
 	beq hd_kmapw
-	jsr map_process_always
+	jsr map_proc_always
 hd_kmapw:
 	ldy #0
 	jsr hd_write256

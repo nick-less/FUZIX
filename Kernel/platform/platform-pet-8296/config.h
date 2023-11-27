@@ -12,7 +12,7 @@
 #define DEBUG 1
 
 #define CONFIG_BANK_FIXED 1
-#define CONFIG_BANKS	2  // 2x32k
+#define CONFIG_BANKS	1  
 
 /* Permit large I/O requests to bypass cache and go direct to userspace */
 #define CONFIG_LARGE_IO_DIRECT(x)	1
@@ -20,23 +20,35 @@
 #define CONFIG_CALL_R2L		/* Runtime stacks arguments backwards */
 
 /*
- *	128k RAM (swap yet to do )
+ *	64k + 2x32k RAM (swap yet to do )
  *  common is bottom on this platform
  */
 #define MAX_MAPS 	2   /* 2 x 32K */
 #define MAP_SIZE    0x8000
-// #define SWAPDEV hd0
 
 #define TICKSPERSEC 60	    /* Ticks per second */
 
 
+/*#define SWAPDEV (swap_dev)	/* Dynamic swap */
+/*#define SWAP_SIZE   0x40	/* 32K in 512 byte blocks */
+/*#define SWAPBASE    0x8000	/* We swap the lot, including stashed uarea */
+/*#define SWAPTOP     0xFF00	/* so it's a round number of 256 byte sectors */
+/*#define MAX_SWAPS   32
+/*#define CONFIG_DYNAMIC_SWAP*/
+
+#define swap_map(x)	((uint8_t *)(x))
+
+/* Permit large I/O requests to bypass cache and go direct to userspace */
+/*#define CONFIG_LARGE_IO_DIRECT(x)	1*/
+
+/* Reclaim the discard space for buffers */
+/*#define CONFIG_DYNAMIC_BUFPOOL*/
 
 #define IO_PEEK_ENABLE *((volatile uint8_t *)0xfff0) = 0x40
 #define IO_PEEK_DISABLE *((volatile uint8_t *)0xfff0) = 0x00
 
 
 /* We've not yet made the rest of the code - eg tricks match this ! */
-#define MAPBASE	    0x8000  /* We map from 0x8000 */
 #define PROGBASE    0x8000  /* also data base */
 #define PROGLOAD    0x8000
 #define PROGTOP     0xFE00

@@ -20,7 +20,7 @@ PTY_BUFFERS;
 
 uint8_t vtattr_cap = 0;
 
-static uint8_t *vtmap = 0x8000;
+// static uint8_t *vtmap = 0x8000;
 
 struct s_queue ttyinq[NUM_DEV_TTY + 1] = {	/* ttyinq[0] is never used */
 	{NULL, NULL, NULL, 0, 0, 0},
