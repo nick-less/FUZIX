@@ -72,13 +72,14 @@ Z80_MMU_HOOKS .equ 0
 ;
 ; Set this if the platform has swap enabled in config.h
 ;
-CONFIG_SWAP .equ 1
+
 ;
 ; The number of disk buffers. Must match config.h
 ;
 NBUFS .equ 5
 
 OP_RD_PORT .equ 0
+OP_PORT .equ 1
 OP_READ_SECTOR .equ 0x86
 OP_WRITE_SECTOR .equ 0x0C
 # 33 "z80-mbc2.S" 2
@@ -352,7 +353,7 @@ outchar:
 ;
 
 vd_map:
- ld bc, OP_RD_PORT
+ ld bc, OP_RD_PORT ; RD and WR use same port
  ld a,(_td_raw)
  or a
  ret z
@@ -376,6 +377,7 @@ _vd_read:
  out (OP_PORT),a
  inir ; transfer first 256 bytes
  inir ; transfer second 256 bytes
+ pop bc
  jp map_kernel ; map kernel then return
 
 _vd_write:
@@ -390,4 +392,5 @@ _vd_write:
  out (OP_PORT),a
  otir ; transfer first 256 bytes
  otir ; transfer second 256 bytes
+ pop bc
  jp map_kernel ; map kernel then return

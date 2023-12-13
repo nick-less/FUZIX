@@ -1,17 +1,18 @@
-;
-;	    Z80-MBC2 support
+	;
+;	    SC720 support
 ;
 ;	This first chunk is mostly boilerplate to adjust for each
 ;	system.
 ;
 
-	; exported symbols
 	.export init_early
 	.export init_hardware
+	.export interrupt_handler
 	.export _program_vectors
 	.export map_buffers
 	.export map_kernel
 	.export map_kernel_di
+	.export map_kernel_restore
 	.export map_proc
 	.export map_proc_a
 	.export map_proc_always
@@ -22,7 +23,6 @@
 	.export plt_interrupt_all
 	.export _kernel_flag
 	.export _int_disabled
-	.export _plt_idle
 
 	; exported debugging tools
 	.export _plt_monitor
@@ -32,13 +32,25 @@
 #include "kernelu.def"
 #include "../../cpu-z80u/kernel-z80.def"
 
+; Base address of SIO/2 chip 0x80
+SIOA_C	.equ	0x80
+SIOA_D	.equ	SIOA_C+1
+SIOB_C	.equ	SIOA_C+2
+SIOB_D	.equ	SIOA_C+3
+
+CTC_CH0	.equ	0x88	; CTC channel 0 and interrupt vector
+CTC_CH1	.equ	0x89	; CTC channel 1 (serial B)
+CTC_CH2	.equ	0x8A	; CTC channel 2 (timer)
+CTC_CH3	.equ	0x8B	; CTC channel 3 (timer count)
+
 ;
 ; Buffers (we use asm to set this up as we need them in a special segment
 ; so we can recover the discard memory into the buffer pool
 ;
 
-	.export _bufpool
 	.buffers
+
+	.export _bufpool
 
 _bufpool:
 	.ds BUFSIZE * NBUFS
@@ -74,36 +86,51 @@ _plt_monitor:
 ;
 _plt_reboot:
 	di
-	jr _plt_reboot
+	ld a, 0x43
+	out (CTC_CH0),a
+	out (CTC_CH1),a
+	out (CTC_CH2),a
+	out (CTC_CH3),a
+	xor a
+	out (0x78),a	;	ROM low
+	rst 0
 
 ; -----------------------------------------------------------------------------
 ; KERNEL MEMORY BANK (may be below 0x8000, only accessible when the kernel is
 ; mapped)
 ; -----------------------------------------------------------------------------
 	.code
-
-;
-;	This routine is called continually when the machine has nothing else
-;	it needs to execute. On a machine with entirely interrupt driven
-;	hardware this could just halt for interrupt.
-;
-_plt_idle:
-	halt
-	ret
-
 ;
 ;	This routine is called very early, before the boot code shuffles
-;	things into place. We do the ttymap here mostly as an example but
-;	even that really ought to be in init_hardware.
+;	things into place.
 ;
 init_early:
 	ret
+
+;
+;	Serial I/O helper for SIO
+;
+	.export _sio_r
+	.export _sio2_otir
+
+_sio2_otir:
+	pop	de
+	pop	hl
+	push	hl
+	push	de
+	push	bc
+	ld	b,0x06
+	ld	c,l
+	ld	hl,_sio_r
+	otir
+	pop	bc
+	ret
+
 
 ; -----------------------------------------------------------------------------
 ; DISCARD is memory that will be recycled when we exec init
 ; -----------------------------------------------------------------------------
 	.discard
-
 ;
 ;	After the kernel has shuffled things into place this code is run.
 ;	It's the best place to breakpoint or trace if you are not sure your
@@ -115,20 +142,114 @@ init_early:
 ;	program up support hardware like PIO and CTC devices here.
 ;
 init_hardware:
-	ld hl, 128
+	ld hl, 512			; 512K total
 	ld (_ramsize), hl
-	ld hl, 64
+	ld de, 64			; 64K for the kernel bank
+	or a
+	sbc hl,de
 	ld (_procmem), hl
 
-	; set up interrupt vectors for the kernel (also sets up common memory in page 0x000F which is unused)
+	; set up interrupt vectors for the kernel
 	ld hl, 0
 	push hl
 	call _program_vectors
 	pop hl
 
+	; Compiler helper vectors - in kernel bank only
+
+	ld	hl, rstblock
+	ld	de, 8
+	ld	bc, 32
+	ldir
+
+	;
+	; Defense in depth - shut everything up first
+	;
+
+	ld a, 0x43
+	out (CTC_CH0),a			; set CH0 mode
+	out (CTC_CH1),a			; set CH1 mode
+	out (CTC_CH2),a			; set CH2 mode
+	out (CTC_CH3),a			; set CH3 mode
+
+	;
+	; Probe for a CTC
+	;
+
+	ld a, 0x47			; CTC 2 as counter
+	out (CTC_CH2),a
+	ld a, 0xAA			; Set a count
+	out (CTC_CH2),a
+	in a,(CTC_CH2)
+	cp 0xAA
+	jr z, maybe_ctc
+	cp 0xA9				; Should be one less
+	jr nz, no_ctc
+maybe_ctc:
+	ld a, 0x07
+	out (CTC_CH2),a
+	ld a, 2
+	out (CTC_CH2),a
+
+	; We are now counting down from 2 very fast, so should only see
+	; those values on the bus
+
+	ld b, 0
+ctc_check:
+	in a,(CTC_CH2)
+	and 0xFC
+	jr nz, no_ctc
+	djnz ctc_check
+
+	;
+	; Looks like we have a CTC
+	;
+
+have_ctc:
+	ld a, 1
+	ld (_ctc_present),a
+	ld (_plt_tick_present),a
+
+	;
+	; Set up timer for 200Hz
+	;
+
+	ld a, 0xB5
+	out (CTC_CH2),a
+	ld a, 144
+	out (CTC_CH2),a	; 200 Hz
+
+	;
+	; Set up counter CH3 for official SIO (the SC110 sadly can't be
+	; used this way).
+
+	ld a, 0x47
+	out (CTC_CH3),a
+	ld a, 255
+	out (CTC_CH3),a
+
+no_ctc:
+	ld hl, sio_setup
+	ld bc, 0xA00 + SIOA_C		; 10 bytes to SIOA_C
+	otir
+	ld hl, sio_setup
+	ld bc, 0x0A00 + SIOB_C		; and to SIOB_C
+	otir
 	im 1 ; set CPU interrupt mode
 
 	ret
+
+sio_setup:
+	.byte 0x00
+	.byte 0x18		; Reset
+	.byte 0x04
+	.byte 0xC4
+	.byte 0x01
+	.byte 0x18
+	.byte 0x03
+	.byte 0xE1
+	.byte 0x05
+	.byte 0xEA		; RTS low
 
 ;
 ;	Bank switching unsurprisingly must be in common memory space so it's
@@ -136,10 +257,8 @@ init_hardware:
 ;
 	.commondata
 
-mapreg:
-	.byte 0	; Our map register is write only so keep a copy
-mapsave:
-	.byte 0	; Saved copy of the previous map (see map_save)
+mapreg:    .byte 0	; Our map register is write only so keep a copy
+mapsave:   .byte 0	; Saved copy of the previous map (see map_save)
 
 _kernel_flag:
 	.byte 1	; We start in kernel mode
@@ -166,11 +285,6 @@ _program_vectors:
 	ld hl, interrupt_handler
 	ld (0x0039), hl
 
-	; set restart vector for FUZIX system calls
-	ld (0x0030), a   ;  (rst 30h is unix function call vector)
-	ld hl, unix_syscall_entry
-	ld (0x0031), hl
-
 	ld (0x0000), a
 	ld hl, null_handler   ;   to Our Trap Handler
 	ld (0x0001), hl
@@ -178,36 +292,28 @@ _program_vectors:
 	; and fall into map_kernel
 
 ;
-;	Mapping set up for the MBC2
+;	Mapping set up for the SC720
 ;
 ;	The top 32K bank holds kernel code and pieces of common memory
 ;	The lower 32K is switched between the various user banks.
-;
-;	We know the ROM mapping is already off
 ;
 ;	The _di versions of the functions are called when we know interrupts
 ;	are definitely off. In our case it's not useful information so both
 ;	symbols end up at the same code.
 ;
-;	FIXME: need to double check IRQ blocking in the non _di paths
-;
 map_buffers:
+	   ; for us no difference. We could potentially use a low 32K bank
+	   ; for buffers but it's not clear it would gain us much value
 map_kernel_di:
 map_kernel:
-	di
+map_kernel_restore:		; On banked kernels this is different
+				; on unbanked it is just a map_kernel
 	push af
-do_map_kernel:
-	ld a, 0x0D
-	out (0x01),a
-	xor a
-map_and_out:
-	out (0x00), a
+	; ROMWBW TPA is last but one bank (last bank is high space)
+	; so for now we hardcode this. We should ask ROMWBW at boot
+	ld a, 0x3C		; RAM bank E (bank F is the top 32K)
 	ld (mapreg),a
-	ld a,(_int_disabled)
-	or a
-	jr nz, dont_ei
-	ei
-dont_ei:
+	out (0x78), a
 	pop af
 	ret
 	; map_proc is called with HL either NULL or pointing to the
@@ -217,7 +323,6 @@ map_proc:
 	or l
 	jr z, map_kernel
 map_proc_hl:
-	di
 	ld a, (hl)			; and fall through
 	;
 	; With a simple bank switching system you need to provide a
@@ -226,15 +331,10 @@ map_proc_hl:
 	; For swap you need to provide what for simple banking is an
 	; identical routine.
 map_for_swap:
-	di
 map_proc_a:			; used by bankfork
 	ld (mapreg), a	; bank
-	push af
-	push af
-	ld a, 0x0D		; Set bank
-	out (0x01),a
-	pop af
-	jr map_and_out
+	out (0x78), a
+	ret
 
 	;
 	; Map the current process into memory. We do this by extracting
@@ -243,10 +343,9 @@ map_proc_a:			; used by bankfork
 map_proc_always_di:
 map_proc_always:
 	push af
-	push hl
-	ld hl, _udata + U_DATA__U_PAGE
-	call map_proc_hl
-	pop hl
+	ld a, (_udata + U_DATA__U_PAGE)
+	ld (mapreg),a
+	out (0x78),a
 	pop af
 	ret
 
@@ -256,11 +355,14 @@ map_proc_always:
 	; have no idea what bank is live. Alternatively defer the save
 	; until you switch to the kernel mapping
 	;
-map_save_kernel:
-	push af
+map_save_kernel:   push af
 	ld a, (mapreg)
 	ld (mapsave), a
-	jr do_map_kernel
+	ld a, 0x3C		; Kernel map (see map_kernel)
+	ld (mapreg),a
+	out (0x78),a
+	pop af
+	ret
 	;
 	; Restore the saved bank. Note that you don't need to deal with
 	; stacking of banks (we never recursively use save/restore), and
@@ -268,12 +370,11 @@ map_save_kernel:
 	;
 map_restore:
 	push af
-	di
-	ld a, 0x0D
-	out (0x01),a
 	ld a, (mapsave)
 	ld (mapreg), a
-	jr map_and_out
+	out (0x78), a
+	pop af
+	ret
 
 	;
 	; Used for low level debug. Output the character in A without
@@ -282,61 +383,21 @@ map_restore:
 	;
 outchar:
 	push af
-	di
-	ld a, 0x01
-	out (0x01),a
+ocloop_sio:
+	xor a                   ; read register 0
+	out (0x80), a
+	in a,(0x80)			; read Line Status Register
+	and 0x04			; get THRE bit
+	jr z,ocloop_sio
+	; now output the char to serial port
 	pop af
-	out (0x00),a
-	ld a,(_int_disabled)
-	or a
-	ret nz
-	ei
+	out (0x81),a
 	ret
 
 ;
-;	Disk block I/O. Needs to be in common as we directly read/write
-;	user space when we can
+;	Stub helpers for code compactness. Note that
 ;
-
-vd_map:
-	ld bc, OP_RD_PORT			; RD and WR use same port
-	ld a,(_td_raw)
-	or a
-	ret z
-	dec a
-	jp z, map_proc_always
-	ld a, (_td_page)
-	jp map_for_swap
-
-	.export _vd_read
-	.export _vd_write
-
-_vd_read:
-	pop de
-	pop hl
-	push hl
-	push de
-	push bc
-	call vd_map
-
-	ld a, OP_READ_SECTOR
-	out (OP_PORT),a
-	inir                                    ; transfer first 256 bytes
-	inir                                    ; transfer second 256 bytes
-	pop bc
-	jp map_kernel                           ; map kernel then return
-
-_vd_write:
-	pop de
-	pop hl
-	push hl
-	push de
-	push bc
-	call vd_map
-
-	ld a, OP_WRITE_SECTOR
-	out (OP_PORT),a
-	otir                                    ; transfer first 256 bytes
-	otir                                    ; transfer second 256 bytes
-	pop bc
-	jp map_kernel                           ; map kernel then return
+;	TODO for new compiler
+;
+	.discard
+rstblock:
