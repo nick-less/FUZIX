@@ -121,7 +121,7 @@ ifeq ($(FUZIX_CCOPTS),)
 endif
 export FUZIX_CCOPTS
 
-all: stand ltools libs apps kernel
+all: tools stand ltools libs apps kernel
 
 stand:
 	+(cd Standalone; $(MAKE))
@@ -135,6 +135,9 @@ libs: ltools
 
 apps: libs
 	+(cd Applications; $(MAKE))
+
+tools:
+	(cd Tools; ./build-$(CPU))
 
 .PHONY: gtags
 gtags:
