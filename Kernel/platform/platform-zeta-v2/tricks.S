@@ -1,19 +1,15 @@
-        .module tricks
-
-        .include "kernel.def"
-        .include "../../cpu-z80/kernel-z80.def"
+#include "kernel.def"
+#include "../../cpu-z80u/kernel-z80.def"
 
 TOP_PORT	.equ	MPGSEL_3
 
-	.include "../../lib/z80bank16.s"
+#include "../../lib/z80ubank16.S"
 
-        .area _COMMONMEM
-
-	.globl mpgsel_cache
+	.common
 
 fork_copy:
 	ld hl, (_udata + U_DATA__U_TOP)
-	ld de, #0x0fff
+	ld de, 0x0fff
 	add hl, de		; + 0x1000 (-1 for the rounding to follow)
 	ld a, h
 	rlca
@@ -24,10 +20,10 @@ fork_copy:
 	ld b, a
 	; we need to copy the relevant chunks
 	ld hl, (fork_proc_ptr)
-	ld de, #P_TAB__P_PAGE_OFFSET
+	ld de, P_TAB__P_PAGE_OFFSET
 	add hl, de
 	; hl now points into the child pages
-	ld de, #_udata + U_DATA__U_PAGE
+	ld de, _udata + U_DATA__U_PAGE
 	; and de is the parent
 fork_next:
 	ld a,(hl)
@@ -38,9 +34,9 @@ fork_next:
 	out (MPGSEL_2), a	; 0x8000 maps the parent
 	inc de
 	exx
-	ld hl, #0x8000		; copy the bank
-	ld de, #0x4000
-	ld bc, #0x4000		; we copy the whole bank, we could optimise
+	ld hl, 0x8000		; copy the bank
+	ld de, 0x4000
+	ld bc, 0x4000		; we copy the whole bank, we could optimise
 				; further
 	ldir
 	exx
@@ -49,7 +45,6 @@ fork_next:
 	ld a, c
 	ld (mpgsel_cache+3),a	; cache the page number
 	out (MPGSEL_3), a	; our last bank repeats up to common
-	ld (mpgsel_cache+3),a	; update in live map
 	; --- we are now on the stack copy, parent stack is locked away ---
 	ret			; this stack is copied so safe to return on
 

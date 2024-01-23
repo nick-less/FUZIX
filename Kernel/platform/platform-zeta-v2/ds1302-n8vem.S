@@ -8,11 +8,11 @@
         .module ds1302-n8vem
 
         ; exported symbols
-        .globl _ds1302_set_ce
-        .globl _ds1302_set_clk
-        .globl _ds1302_set_data
-        .globl _ds1302_set_driven
-        .globl _ds1302_get_data
+        .export _ds1302_set_ce
+        .export _ds1302_set_clk
+        .export _ds1302_set_data
+        .export _ds1302_set_driven
+        .export _ds1302_get_data
 
         .include "kernel.def"
         .include "../../cpu-z80/kernel-z80.def"
