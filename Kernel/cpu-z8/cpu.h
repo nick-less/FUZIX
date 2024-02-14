@@ -22,7 +22,7 @@ extern void *memmove(void *dest, const void *src, size_t n);
 
 extern int16_t strlen(const char *p);
 
-#define	staticfast	static
+#define	staticfast
 
 /* User's structure for times() system call */
 typedef unsigned long clock_t;
@@ -37,17 +37,16 @@ typedef union {            /* this structure is endian dependent */
 
 #define used(x)	x
 
-#define cpu_to_le16(x)	(x)
-#define le16_to_cpu(x)	(x)
-#define cpu_to_le32(x)	(x)
-#define le32_to_cpu(x)	(x)
+#define cpu_to_le16(x)	swab(x)
+#define le16_to_cpu(x)	swab(x)
+#define cpu_to_le32(x)	((((uint32_t)cpu_to_le16((x) & 0xFFFF)) << 16) | \
+				(uint32_t)cpu_to_le16((x) >> 16))
+#define le32_to_cpu(x)	cpu_to_le32(x)
 
-#define ntohs(x)	((((x) & 0xFF) << 8) | (((x) & 0xFF00) >> 8))
-#define ntohl(x)	((((x) & 0xFF) << 24) | (((x) & 0xFF00) << 8) | \
-                         (((x) & 0xFF0000) >> 8) | (((x >> 24) & 0xFF)))
+#define ntohs(x)	(x)
+#define ntohl(x)	(x)
 
-/* Deal with SDCC code gen issue */
-#define HIBYTE32(x)	(((uint8_t *)&(x))[3])
+#define BIG_ENDIAN
 
 #define __packed
 #define barrier()

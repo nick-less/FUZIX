@@ -5,9 +5,8 @@ typedef signed short int16_t;
 typedef unsigned char uint8_t;
 typedef signed char int8_t;
 
-/* Fuzix cc thinks in 16bit chunks and extends 8bit when working internally. All our
-   8bit indexes etc give it indigestion */
-
+/* For now the Fuzix compiler is happiler with words. If we add some byte
+   op logic this may change */
 typedef unsigned short uint_fast8_t;
 typedef signed short int_fast8_t;
 
