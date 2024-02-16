@@ -21,14 +21,17 @@ plt_interrupt_all:
 
 	.export _int_disabled
 	.export _mem_bank
+	.export istack_switched_sp
 
 	.org 8
 _int_disabled:
 	.byte 0
 _mem_bank:
 	.byte 0
-_saved_bank:
+_mem_saved_bank:
 	.byte 0
+istack_switched_sp:
+	.word 0
 
 	.code
 
@@ -63,6 +66,7 @@ init_hardware:
 
 _program_vectors:
 	; TODO need to fill in low 12 bytes when we do ints
+	; Do this in crt0.S instead for each code bank
 	ret
 
 	.export map_proc
@@ -82,22 +86,22 @@ map_save_kernel:
 	ld _mem_saved_bank, _mem_bank
 map_kernel:
 map_kernel_di:
-	ld _mem_bank,#0x20
-map_bank:
 	push r3
 	push r14
 	push r15
-map_bankp:
-	ld r14,#0xFF
-	ld r15,#0x78
+	ld _mem_bank,#0x20
+	ld r14,#0xFF	; MMU E
+	ld r15,r14
 	;  set I/O on
 	push 2
 	and 2,#0xBF
 	push r3
-	ld r3,_mem_bank
+	ld r3,#0xC3	; Bank 0 is kernel 
+	; Write to E bank
 	lde @rr14,r3
-	inc r3
-	incw rr14
+	decw rr14
+	clr r3		; Bank 0 is kernel code
+	; Write to C bank
 	lde @rr14,r3
 	inc r3
 	incw rr14
@@ -115,11 +119,37 @@ map_proc_di:
 	jr nz, map_notk
 	or r15,r15
 	jr z, map_kernel
+map_notk:
 	push r3
 	lde r3,@rr14
 	ld _mem_bank,r3
 	pop r3
-	jr map_bank
+map_bank:
+	push r3
+	push r14
+	push r15
+map_bankp:
+	ld r14,#0xFF	; MMU E
+	ld r15,r14
+	;  set I/O on
+	push 2
+	and 2,#0xBF
+	push r3
+	ld r3,_mem_bank
+	; Write to E bank
+	lde @rr14,r3
+	decw rr14
+	; Write to C bank
+	lde @rr14,r3
+	inc r3
+	incw rr14
+	lde @rr14,r3
+	; Restore I/O on/off
+	pop 2
+	pop r15
+	pop r14
+	pop r3
+	ret
 
 map_for_swap:
 map_proc_a:
@@ -157,12 +187,166 @@ outchw:
 ;
 ;	Bitbang SPI : TODO
 ;
-	.export _z8_spi_tx
-_z8_spi_tx:
+	.export _sd_spi_tx_byte
+	.export _sd_spi_rx_byte
+	.export _sd_spi_tx_sector
+	.export _sd_spi_rx_sector
+	.export _sd_spi_lower_cs
+	.export _sd_spi_raise_cs
+	.export _sd_spi_fast
+	.export _sd_spi_slow
+
+_sd_spi_tx_byte:
+	ld r15,#2
+	call __gargr1
+	; r3 is now the byte
+	ld r12,3
+	ld r13,r12
+	or r12,#0x40	; clock high
+	and r13,#0xBF	; clock low
+spi_tx_r3:
+	; 8 cycles of bit banging
+	rlc r0
+	add r3,r3
+	ld 2,r12	; clock high
+	rrc r0		; top bit is now bit to send
+	ld 2,r3
+	ld 2,r13	; clock low
+	rlc r0
+	add r3,r3
+	ld 2,r12	; clock high
+	rrc r0		; top bit is now bit to send
+	ld 2,r3
+	ld 2,r13	; clock low
+	rlc r0
+	add r3,r3
+	ld 2,r12	; clock high
+	rrc r0		; top bit is now bit to send
+	ld 2,r3
+	ld 2,r13	; clock low
+	rlc r0
+	add r3,r3
+	ld 2,r12	; clock high
+	rrc r0		; top bit is now bit to send
+	ld 2,r3
+	ld 2,r13	; clock low
+	rlc r0
+	add r3,r3
+	ld 2,r12	; clock high
+	rrc r0		; top bit is now bit to send
+	ld 2,r3
+	ld 2,r13	; clock low
+	rlc r0
+	add r3,r3
+	ld 2,r12	; clock high
+	rrc r0		; top bit is now bit to send
+	ld 2,r3
+	ld 2,r13	; clock low
+	rlc r0
+	add r3,r3
+	ld 2,r12	; clock high
+	rrc r0		; top bit is now bit to send
+	ld 2,r3
+	ld 2,r13	; clock low
+	rlc r0
+	add r3,r3
+	ld 2,r12	; clock high
+	rrc r0		; top bit is now bit to send
+	ld 2,r3
+	ld 2,r13	; clock low
+	
+	ret	
+	
+_sd_spi_rx_byte:
+	ld r12,3
+	ld r13,r12
+	or r12,#0x40	; clock high
+	and r13,#0xBF	; clock low
+spi_rx_r3:
+	ld 2,r12
+	ld 2,r13
+	cp 3,#0x80
+	adc r3,r3	; shift left amd add in bit
+	ld 2,r12
+	ld 2,r13
+	cp 3,#0x80
+	adc r3,r3	; shift left amd add in bit
+	ld 2,r12
+	ld 2,r13
+	cp 3,#0x80
+	adc r3,r3	; shift left amd add in bit
+	ld 2,r12
+	ld 2,r13
+	cp 3,#0x80
+	adc r3,r3	; shift left amd add in bit
+	ld 2,r12
+	ld 2,r13
+	cp 3,#0x80
+	adc r3,r3	; shift left amd add in bit
+	ld 2,r12
+	ld 2,r13
+	cp 3,#0x80
+	adc r3,r3	; shift left amd add in bit
+	ld 2,r12
+	ld 2,r13
+	cp 3,#0x80
+	adc r3,r3	; shift left amd add in bit
+	ld 2,r12
+	ld 2,r13
+	cp 3,#0x80
+	adc r3,r3	; shift left amd add in bit
+	com r3
+	ret
+	
+_sd_spi_tx_sector:
+	ld r15,#2
+	call __gargr2
+	ld r15,r3
+	ld r14,r2		; pointer
+	clr r2
+	ld r12,3
+	ld r13,r12
+	or r12,#0x40	; clock high
+	and r13,#0xBF	; clock low
+txlp:
+	call spi_tx_r3
+	lde @rr14,r3
+	incw rr14
+	call spi_rx_r3
+	lde @rr14,r3
+	incw rr14
+	djnz r2,txlp
 	ret
 
-	.export _z8_spi_rx
-_z8_spi_rx:
+_sd_spi_rx_sector:
+	ld r15,#2
+	call __gargr2
+	ld r15,r3
+	ld r14,r2		; pointer
+	clr r2
+	ld r12,3
+	ld r13,r12
+	or r12,#0x40	; clock high
+	and r13,#0xBF	; clock low
+rxlp:
+	lde r3,@rr14
+	incw rr14
+	call spi_rx_r3
+	lde r3,@rr14
+	incw rr14
+	call spi_rx_r3
+	djnz r2,rxlp
+	ret
+
+_sd_spi_lower_cs:
+	or 2,#0x20	; set CS1 high fist
+	and 3,#0xDF	; set CS0 low CS1 high
+	ret
+_sd_spi_raise_cs:
+	or 2,#0x20	; set CS1 high
+	or 3,#0x40	; set CS0 high
+_sd_spi_fast:
+_sd_spi_slow:
 	ret
 
 ;
@@ -204,7 +388,7 @@ has_ch:
 	.export _z8tty_put
 _z8tty_put:
 	ld r3,#2
-	call __garg2
+	call __gargr2
 	ld 0xF0,r3
 	ret
 
