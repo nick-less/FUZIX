@@ -17,10 +17,37 @@
 /* Banked memory set up */
 #define CONFIG_BANK_FIXED
 
-#define MAX_MAPS	16
-#define MAP_SIZE	0xC000
+/* Set this in the asm config (kernelu.def) to match or badness */
+#undef CONFIG_MAP80		/* Set for MAP80 instead of page mode */
 
-#define CONFIG_BANKS	1	/* 1 x 60K */
+/* TODO: set the link options to put common at E000 for MAP80 */
+#ifdef CONFIG_MAP80_NOTYET
+#define MAX_MAPS	16
+#define MAP_SIZE	0xE000
+#define PROGBASE	0x0000  /* Base of user  */
+#define PROGLOAD	0x0100  /* Load and run here */
+#define PROGTOP		0xDE00  /* Top of program, udata stash follows */
+#define PROC_SIZE	56	/* Memory needed per process */
+#define SWAPBASE	0x0000	/* We swap the lot in one, include the */
+#define SWAPTOP		0xE000	/* vectors so its a round number of sectors */
+#define SWAP_SIZE	0x70 	/* 56K in blocks (to get the udata stash) */
+#else
+#define MAX_MAPS	16	/* TODO 4 */
+#define MAP_SIZE	0xC000
+#define PROGBASE	0x0000  /* Base of user  */
+#define PROGLOAD	0x0100  /* Load and run here */
+#define PROGTOP		0xBE00	/* Top of program, udata stash follows */
+#define PROC_SIZE	48 	/* Memory needed per process */
+#define SWAPBASE	0x0000	/* We swap the lot in one, include the */
+#define SWAPTOP		0xC000	/* vectors so its a round number of sectors */
+#define SWAP_SIZE	0x60 	/* 48K in blocks (to get the udata stash) */
+#endif
+
+#define CONFIG_BANKS	1	/* 1 x  48/56K */
+
+/* We do a bit of magic because we have NMI timers that queue events
+   if the interrupts are off, so our "ei" has to fix it */
+#define CONFIG_SOFT_IRQ
 
 /* Vt definitions */
 /* Although it's a simple display the margins and weird top line mean it's
@@ -30,15 +57,8 @@
 #define VT_RIGHT	47
 #define VT_BOTTOM	15
 
-#define TICKSPERSEC 50   /* Ticks per second */
-#define PROGBASE    0x0000  /* Base of user  */
-#define PROGLOAD    0x0100  /* Load and run here */
-#define PROGTOP     0xBE00  /* Top of program, udata stash follows */
-#define PROC_SIZE   48 	    /* Memory needed per process */
-
-#define SWAP_SIZE   0x60 	/* 48K in blocks (to get the udata stash) */
-#define SWAPBASE    0x0000	/* We swap the lot in one, include the */
-#define SWAPTOP	    0xC000	/* vectors so its a round number of sectors */
+#define TICKSPERSEC 10      /* Ticks per second */
+#define MAXTICKS    10      /* The 58174 is 0.5 sec accuracy so forces this */
 
 #define MAX_SWAPS	64	/* Should be plenty (2MB!) */
 
@@ -69,6 +89,7 @@
 #define CONFIG_TINYIDE_INDIRECT
 #define CONFIG_TINYIDE_8BIT
 #define IDE_IS_8BIT(x)	1
+#define CONFIG_TD_SCSI
 
 extern void plt_discard(void);
 #define plt_copyright()

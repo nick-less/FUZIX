@@ -7,7 +7,8 @@ __syscall:
 	ld r14,#>_errno
 	ld r15,#<_errno
 	lde @rr14,r0
-	lde @rr15,r1
+	incw rr14
+	lde @rr14,r1
 	ld r2,#255
 	ld r3,r2
 noerr:
