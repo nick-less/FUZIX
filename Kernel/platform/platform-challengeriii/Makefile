@@ -1,20 +1,18 @@
 CROSS_CCOPTS += -I../../dev/ -I../../dev/net/
 
-CSRCS = devtty.c
-CSRCS += devices.c main.c wiznet.c
+CSRCS = devtty.c tinyide_pia.c devhd.c
+CSRCS += devices.c main.c
 
 DISCSRCS = discard.c
 
-ASRCS = zrc.S crt0.S
+ASRCS = challenger.S crt0.S
 ASRCS += tricks.S commonmem.S
 
 DISCARD_DSRCS = ../../dev/tinydisk_discard.c ../../dev/tinyide_discard.c
-DISCARD_DSRCS += ../../dev/ds1302_discard.c
 DSRCS = ../../dev/tinydisk.c ../../dev/tinyide.c
-DSRCS += ../../dev/ds1302.c
-NSRCS = ../../dev/net/net_w5x00.c ../../dev/net/net_native.c
+NSRCS =
 
-DASRCS = ../../dev/ds1302_rcbusu.S
+DASRCS =
 
 COBJS = $(CSRCS:.c=.o)
 AOBJS = $(ASRCS:.S=.o)
@@ -52,14 +50,14 @@ $(DAOBJS): %.o: %.S
 	$(CROSS_AS) $(ASOPTS) $@ $<
 
 clean:
-	rm -f $(OBJS) $(JUNK)  core *~ boot.ihx boot.o boot
+	rm -f $(JUNK)  core *~ *.bin
 
 #
 #	Attach the kernel to the boot block
 #
-image:	boot
-	$(CROSS_LD) -b -C 0x0100 -S 0xF400 -f CLDBbXSs -o fuzix.bin \
-	crt0.o commonmem.o zrc.o ../../start.o \
+image:	loader-6502.bin loader-z80.bin
+	$(CROSS_LD) -b -C 0x0100 -S 0xD000 -f CLDBbXSs -o fuzix.bin \
+	crt0.o commonmem.o challenger.o ../../start.o \
 	../../version.o ../../cpu-z80u/lowlevel-z80u.o \
 	../../usermem.o tricks.o main.o discard.o \
 	../../timer.o ../../kdata.o devices.o ../../devio.o \
@@ -68,33 +66,46 @@ image:	boot
 	../../syscall_fs.o ../../syscall_fs2.o ../../syscall_fs3.o \
 	../../syscall_proc.o ../../syscall_other.o ../../syscall_net.o \
 	../../network.o ../../tty.o ../../mm.o ../../mm/memalloc_none.o \
-	../../swap.o ../../mm/bankfixed.o ../../devsys.o \
+	../../swap.o ../../mm/bankfixed.o ../../devsys.o devhd.o \
 	devtty.o ../../dev/tinydisk.o ../../dev/tinydisk_discard.o \
-	../../dev/tinyide.o ../../dev/tinyide_discard.o \
-	../../dev/net/net_native.o ../../dev/net/net_w5x00.o wiznet.o \
-	../../dev/ds1302_rcbusu.o ../../dev/ds1302.o ../../dev/ds1302_discard.o \
-	/opt/fcc/lib/z80/lib/libz80.a -m fuzix.tmpmap
+	../../dev/tinyide.o ../../dev/tinyide_discard.o tinyide_pia.o \
+	../../cpu-z80u/usermem_std-z80u.o \
+	/opt/fcc/lib/z80/libz80.a -m fuzix.tmpmap
 	perl -lpe '$$_=hex' fuzix.tmpmap | paste -d" " - fuzix.tmpmap  |  sort -n |  cut -d" " -f 2- >../../fuzix.map
 	../../tools/pack85 <../../fuzix.map fuzix.bin ../../fuzix.bin
 	
 #
 #	Compile up the boot block
 #
-boot: boot.s
-	asz80 boot.s -o boot.o
-	ldz80 -b -C 0 boot.o -o boot.bin
-	../../tools/doubleup <boot.bin >boot
 
+loader-6502.bin: loader-6502.S
+	fcc -m6502 loader-6502.S -c -o loader-6502.o
+	ld6502 -b loader-6502.o -o loader-6502.bin
+
+loader-z80.bin: loader-z80.S
+	fcc -mz80 loader-z80.S -c -o loader-z80.o
+	ldz80 -b loader-z80.o -o loader-z80.bin
+	
 IMAGES = $(FUZIX_ROOT)/Images/$(TARGET)
 
-diskimage:
+../../tools/makeosihd: ../../tools/makeosihd.c
+	gcc -Wall -pedantic ../../tools/makeosihd.c -o ../../tools/makeosihd
+	
+../../tools/osifloppy: ../../tools/osifloppy.c
+	gcc -Wall -pedantic ../../tools/osifloppy.c -o ../../tools/osifloppy
+	
+diskimage: ../../tools/osifloppy ../../tools/makeosihd
+	# Build the bootable floppy image
+	../../tools/osifloppy 8 loader-6502.bin loader-z80.bin ../../fuzix.bin >$(IMAGES)/boot8
+	../../tools/osifloppy 5 loader-6502.bin loader-z80.bin ../../fuzix.bin >$(IMAGES)/boot5
 	# Make a blank disk image with partition
 	dd if=$(FUZIX_ROOT)/Standalone/filesystem-src/parttab.20M of=$(IMAGES)/disk.img bs=20152320 conv=sync
 	# Add the file system
 	dd if=$(IMAGES)/filesys8.img of=$(IMAGES)/disk.img bs=512 seek=2048 conv=notrunc
-	# Add the kernel
-	dd if=../../fuzix.bin of=$(IMAGES)/disk.img bs=256 seek=4 skip=1 conv=notrunc
-	# Add the zrc bootstrap
-	dd if=boot of=$(IMAGES)/disk.img bs=446 count=1 conv=notrunc
-	# Make an emulator image of it
+	# TODO: add the kernel (not that we have an HD boot yet)
+	# Make a CD-36 out of it for winOSI
+	../../tools/makeosihd cd-36 <$(IMAGES)/disk.img >$(IMAGES)/cd-36.hd
+	# And a CD-74
+	../../tools/makeosihd cd-74 <$(IMAGES)/disk.img >$(IMAGES)/cd-74.hd
+	# Make an emulator image of it for PIA IDE
 	cat $(FUZIX_ROOT)/Standalone/filesystem-src/idehdr.20M $(IMAGES)/disk.img > $(IMAGES)/emu-ide.img

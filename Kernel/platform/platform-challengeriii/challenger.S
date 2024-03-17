@@ -1,5 +1,7 @@
 ;
-;	ZRC support
+;	Challenger III support
+;
+;	Note that this system is entirely MMIO
 ;
 	; exported symbols
 	.export init_early
@@ -89,10 +91,7 @@ _plt_reboot:
 init_early:
 	ret
 
-; -----------------------------------------------------------------------------
-; DISCARD is memory that will be recycled when we exec init
-; -----------------------------------------------------------------------------
-	.discard
+	.common
 
 ;
 ;	After the kernel has shuffled things into place this code is run.
@@ -105,10 +104,66 @@ init_early:
 ;	program up support hardware like PIO and CTC devices here.
 ;
 init_hardware:
-	ld hl,#2048
+	; Set up for bank switching
+	ld hl,0xF701
+	ld (hl),4
+	ld a,0x0F
+	ld (0xF700),a
+
+	ld a,0x0E		; 0x0F is present defacto
+	ld hl,0x0004		; safe address for poking
+
+	ld de,1			; 0xF is present
+next:
+	rl e
+	rl d
+	ld (0xF700),a		; bank set
+	ld (hl),a
+	cp (hl)
+	jr nz, bad
+	inc (hl)
+	cp (hl)
+	jr z, bad
+	dec (hl)
+	cp (hl)
+	jr nz, bad
+	inc e
+bad:
+	dec a
+	jr nz, next
+
+	ld a,15			; restore system memory mapping
+	ld (0xF700),a
+
+	; DE is now a bit mask of present banks
+	ld (_bankmask),de
+
+	ld b,16
+	xor a
+countbits:
+	rl e
+	rl d
+	adc a,0
+	djnz countbits
+
+	; A is now number of 1 bits (each being 48K) and max of 16
+	; Convert into KB
+	add a,a
+	add a,a
+	add a,a		; x 8 then might overflow
+	ld l,a
+	ld h,0
+	add hl,hl	; x 16
+	push hl
+	add hl,hl	; x 32
+	pop de
+	add hl,de	; x 48
+
+	ld de,#8
+	add hl,de	; 8K at Dxxx
+
 	ld (_ramsize), hl
-	ld de,#64		; and 64K for kernel (so 128K gets you only
-				; two user banks which is OK single user)
+	ld de,#56		; and 56K for kernel
 	or a
 	sbc hl,de
 	ld (_procmem), hl
@@ -127,6 +182,9 @@ init_hardware:
 
 	im 1 ; set CPU interrupt mode
 
+	; Divide by 16, RTS low, RX interrupts 8N2 */
+	ld a,0x91
+	ld (0xFC00),a
 	ret
 
 ;
@@ -211,20 +269,20 @@ map_buffers:
 map_kernel_restore:
 map_kernel_di:
 map_kernel:
-	push af
-	xor a
-	ld (mapreg),a
-	out (0x1F), a
-	pop af
+	push	af
+	ld	a,0x0F
+	ld	(mapreg),a
+	ld	(0xF700),a
+	pop	af
 	ret
 	; map_proc is called with HL either NULL or pointing to the
 	; page mapping. Unlike the other calls it's allowed to trash AF
 map_proc:
-	ld a, h
-	or l
-	jr z, map_kernel
+	ld	a, h
+	or	l
+	jr	z, map_kernel
 map_proc_hl:
-	ld a, (hl)			; and fall through
+	ld	a, (hl)			; and fall through
 	;
 	; With a simple bank switching system you need to provide a
 	; method to switch to the bank in A without corrupting any
@@ -233,8 +291,8 @@ map_proc_hl:
 	; identical routine.
 map_for_swap:
 map_proc_a:			; used by bankfork
-	ld (mapreg), a	; bank
-	out (0x1F), a
+	ld	(mapreg), a	; bank
+	ld	(0xF700), a
 	ret
 
 	;
@@ -243,11 +301,11 @@ map_proc_a:			; used by bankfork
 	;
 map_proc_always_di:
 map_proc_always:
-	push af
-	ld a,(_udata + U_DATA__U_PAGE)
-	ld (mapreg),a
-	out (0x1F),a
-	pop af
+	push	af
+	ld	a,(_udata + U_DATA__U_PAGE)
+	ld	(mapreg),a
+	ld	(0xF700),a
+	pop	af
 	ret
 
 	;
@@ -256,13 +314,14 @@ map_proc_always:
 	; have no idea what bank is live. Alternatively defer the save
 	; until you switch to the kernel mapping
 	;
-map_save_kernel:   push af
-	ld a, (mapreg)
-	ld (mapsave), a
-	xor a
-	ld (mapreg),a
-	out (0x1F),a
-	pop af
+map_save_kernel:
+	push af
+	ld	a, (mapreg)
+	ld	(mapsave), a
+	ld	a,0x0F
+	ld	(mapreg),a
+	ld	(0xF700),a
+	pop	af
 	ret
 	;
 	; Restore the saved bank. Note that you don't need to deal with
@@ -270,11 +329,11 @@ map_save_kernel:   push af
 	; that we may well call save and decide not to call restore.
 	;
 map_restore:
-	push af
-	ld a, (mapsave)
-	ld (mapreg), a
-	out (0x1F), a
-	pop af
+	push	af
+	ld	a, (mapsave)
+	ld	(mapreg), a
+	ld	(0xF700), a
+	pop	af
 	ret
 
 	;
@@ -284,11 +343,11 @@ map_restore:
 	;
 outchar:
 	push af
-twait:	in a,(0x80)
+twait:	ld a,(0xFC00)
 	and #0x02
 	jr z, twait
 	pop af
-	out (0x81),a
+	ld (0xFC01),a
 	ret
 
 	.discard
@@ -334,6 +393,151 @@ ___ldhlhl:
 
 	.common
 ;
+;	OSI disk helpers for HD
+;
+	.export _osihd_read
+	.export _osihd_write
+	.export _osihd_copy_out
+	.export _osihd_copy_in
+
+osihd_initcp:
+	ld	d,(hl)		; Block offset (low byte)
+	inc	hl
+	inc	hl
+	ld	a,(hl)
+	inc	hl
+	ld	h,(hl)		; Data pointer
+	ld	l,a
+	ld	e,0
+	ex	de,hl
+	; Block offset (in 256s) in HL, dptr in DE
+	add	hl,hl		; 512s
+	ld	bc,0xE018	; Disk buffer (TODO CD7 this moves)
+	add	hl,bc		; offset
+	ld	a,(_td_raw)
+	or	a
+	ret	z
+	dec	a
+	jp	z,map_proc_always
+	ld	a,(_td_page)
+	jp	map_for_swap
+
+wait_seek:
+	ld	a,(0xC202)
+	cp	0xD9
+	ret	z
+	and	0xC4
+	jr	nz,wait_seek
+	inc	a	; force NZ
+	ret
+
+_osihd_copy_out:
+	ld	hl,2
+	add	hl,sp
+	push	bc
+	call	osihd_initcp
+docopy:
+	ld	bc,512
+	; Unrolled for a bit more speed. At 1Mhz every little helps
+	; especially as all disk I/O hits this
+	; Do 32 LDI. Each will dec bc
+copyout:
+	ldi
+	ldi
+	ldi
+	ldi
+
+	ldi
+	ldi
+	ldi
+	ldi
+
+	ldi
+	ldi
+	ldi
+	ldi
+
+	ldi
+	ldi
+	ldi
+	ldi
+
+	ldi
+	ldi
+	ldi
+	ldi
+
+	ldi
+	ldi
+	ldi
+	ldi
+
+	ldi
+	ldi
+	ldi
+	ldi
+
+	ldi
+	ldi
+	ldi
+	ldi
+
+	jp	pe, copyout
+
+	pop	bc
+	jp	map_kernel
+
+_osihd_copy_in:
+	ld	hl,2
+	add	hl,sp
+	push	bc
+	call	osihd_initcp
+	ex	de,hl
+	jr	docopy
+
+	; TODO: Push down DI stuff so we don't di during the seek phase
+_osihd_write:
+	push	bc
+	ld	b,0xC0
+	jr	osihd_op
+_osihd_read:
+	push	bc
+	ld	b,0x80
+osihd_op:
+	ld	hl,0xC280
+	ld	de,(_hddat);	; head in E cyl in D
+	ld	a,(hl)
+	ld	(0xC200),de
+	ld	a,0x10
+	ld	c,(hl)
+	ld	(0xC202),a	; Seek please
+	xor	a
+	ld	(0xC202),a
+	; Wait for seek completion
+	call	wait_seek
+	jr	nz, failed
+	ld	de,(_hddat + 2)
+	ld	a,(hl)
+	ld	(0xC203),de
+	ld	de,(_hddat + 4)
+	ld	a,(hl)
+	ld	(0xC205),de
+	ld	a,b
+	ld	e,(hl)
+	ld	(0xC207),a		; Issue command
+wait_done:
+	ld	a,(0xC207)
+	rla
+	jr	c, wait_done
+	ld	hl,1
+	pop	bc
+	ret
+failed:
+	ld	hl,0
+	pop	bc
+	ret
+
+;
 ;	IDE disk helpers
 ;
 	.export _devide_read_data
@@ -356,19 +560,43 @@ _devide_read_data:
 	push	de
 	push	bc
 	call	ide_map
-	inir
-	inir
+	;	PPIDE over a PIA
+	ld	hl,0xCD02
+rdloop:
+	ld	(hl),0xD0	; /RD low
+	ld	a,(0xCD00)
+	ld	(hl),0xF0	; RD back high
+	ld	(de),a
+	inc	de
+	ld	(hl),0xD0	; /RD low
+	ld	a,(0xCD00)
+	ld	(hl),0xF0	; RD back high
+	ld	(de),a
+	inc	de
+	djnz	rdloop
 	pop	bc
 	jp	map_kernel_restore
 
 _devide_write_data:
+	call	_ide_set_w
 	pop	de
 	pop	hl
 	push	hl
 	push	de
 	push	bc
 	call	ide_map
-	otir
-	otir
+wrloop:
+	ld	a,(de)
+	ld	(0xCD00),a
+	ld	(hl),0xD0	; /WR low
+	inc	de
+	ld	(hl),0xF0	; WR back high
+	ld	a,(de)
+	ld	(0xCD00),a
+	ld	(hl),0xD0	; /WR low
+	inc	de
+	ld	(hl),0xF0	; WR back high
+	djnz	rdloop
 	pop	bc
-	jp	map_kernel_restore
+	call	map_kernel_restore
+	jp	_ide_set_r
