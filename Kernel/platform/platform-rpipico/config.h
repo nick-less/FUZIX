@@ -1,3 +1,6 @@
+#ifndef CONFIG_H
+#define CONFIG_H
+#include "tusb_config.h"
 /*
  *	Set this according to your SD card pins (default
  *	is the David Given arrangement).
@@ -35,12 +38,17 @@
 #define CONFIG_PLATFORM_SWAPCTL
 /* Platform manages process brk. */
 #define CONFIG_PLATFORM_BRK
+/* Platform IOCTL on /dev/sys (maj:min)(4:6) */
+#define CONFIG_DEV_PLATFORM
 
 #define CONFIG_32BIT
 #define CONFIG_USERMEM_DIRECT
 /* Serial TTY, no VT or font */
 #undef CONFIG_VT
 #undef CONFIG_FONT8X8
+
+/* Built in NAND flash. Warning, it's unstable. */
+#define CONFIG_PICO_FLASH
 
 /* Program layout */
 
@@ -73,7 +81,12 @@ extern uint8_t progbase[USERMEM];
 #define SWAPDEV    (swap_dev) /* dynamic swap */
 
 /* Device parameters */
-#define NUM_DEV_TTY 1
+#define NUM_DEV_TTY_UART 1
+#define NUM_DEV_TTY_USB (CFG_TUD_CDC)
+#define NUM_DEV_TTY (NUM_DEV_TTY_UART + NUM_DEV_TTY_USB)
+
+#define USB_TO_TTY(x) (x + 1 + NUM_DEV_TTY_UART)
+#define TTY_TO_USB(x) (x - 1 - NUM_DEV_TTY_UART)
 
 #define TTYDEV   BOOT_TTY /* Device used by kernel for messages, panics */
 #define NBUFS    20       /* Number of block buffers */
@@ -91,5 +104,6 @@ extern uint8_t progbase[USERMEM];
 #define MANGLED 1
 #include "mangle.h"
 
+#endif
 // vim: sw=4 ts=4 et
 
