@@ -3,7 +3,7 @@
 ;	interrupt stacks. As this is standard in almost all cases you can
 ;	just include the standard implementation.
 ;
-        .common
+	.common
 
 #include "../../cpu-z80u/std-commonmem.S"
 
