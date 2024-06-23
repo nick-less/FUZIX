@@ -11,7 +11,7 @@
 ;	7		CODE 3 + VIDEO + FONTS
 ;	2/5		4000-BFFF (common and user low buffer)
 ;
-;	4		Free
+;	4/6		Free
 ;	8+		Free
 ;
 
@@ -148,12 +148,76 @@ init_early:
 	out (0xFE),a
         ret
 
+	.area _COMMONMEM
+	;
+	;	Set interrupt vectors in each bank. Run from discard
+	;	so we don't page ourself out
+
+_program_vectors:
+	pop bc
+	pop de
+	pop hl			;	task page ptr
+	push hl
+	push de
+	push bc
+	inc hl
+	inc hl
+	ld a, (hl)		; high page of the pair
+
+setvectors:
+	call map_save_kernel
+	call switch_bank
+	ld a, #0x18
+	ld (0xffff), a		;	JR (plus ROM at 0 gives JR $FFF4)
+	ld a, #0xC3		;	JP
+	ld (0xFFF4), a		;	FFF4-6 are the interrupt vector
+	ld hl, #interrupt_handler
+	ld (0xFFF5), hl		;	to IRQ handler
+	call map_restore
+	ret
+
+setallvectors:
+	xor a			;	bank 0	(CODE 1)
+	call setvectors
+	ld a, #1		;	bank 1	(CODE 2)
+	call setvectors
+	ld a, #7		;	bank 7	(CODE 3 / VIDEO)
+	call setvectors
+	ld a, #3		;	bank 3	(CODE 4)
+	jr setvectors
+
+	; Has to live in common space
+
+size_ram:
+	ld hl,#0xFFFC		;	safe for the moment addr
+	ld bc,#0x7FFD
+	ld a, #0x5F
+	out (c),a
+	ld (hl),a
+	ld a, #0xDF		;	will change page on 512K
+	out (c),a
+	ld (hl),a
+	cp (hl)			;	check no decode
+	jr nz,is_256
+	ld a,#0x5F		;	check partial decode
+	out (c),a
+	cp (hl)
+	jr nz,is_256
+	ld hl,#512
+size_out:
+	ld a,#0x1F		;	back to _VIDEO/Page 7
+	out (c),a
+	ret
+is_256:
+	ld hl,#256
+	jr size_out
+
+
 	.area _VIDEO
 
 init_hardware:
         ; set system RAM size
-	; FIXME: probe this and map accordingly in discard.c
-        ld hl, #256
+	call size_ram
         ld (_ramsize), hl
 	; We lose the following to the system
 	; 0: first kernel bank at C000
@@ -161,24 +225,19 @@ init_hardware:
 	; 2: 4000-7FFF (screen and buffers)
 	; 3: fourth kernel bank at C000
 	; 5: 8000-BFFF (working 16K copy)
-	; 6: second kernel bank at C000
 	; 7: third kernel bank at C000
 	;
-        ld hl, #(256 - 96)
+	ld de,#96
+	or a
+	sbc hl,de
         ld (_procmem), hl
 
-	;
-	;	No low RAM so need IM2 and custom syscall interface
-	;	(will need to tackle that nicely in libc too)
-	;
+	; Set up the vectors on all the kernel pages
+	; user will be set up as we go
+	push af
+	call setallvectors
+	pop af
 
-	ld a,#0xC3
-	ld (0xFFFD),a
-	ld (0xFFF4),a
-	ld hl,#unix_syscall_entry
-	ld (0xFFFE),hl
-	ld hl,#interrupt_handler
-	ld (0xFFF5),hl
         ; screen initialization
 	push af
 	call _vtinit
@@ -194,9 +253,6 @@ init_hardware:
 ; COMMON MEMORY PROCEDURES FOLLOW
 
         .area _COMMONMEM
-
-_program_vectors:
-	ret
 
 	; Swap helper. Map the page in A into the address space such
 	; that swap_map() gave the correct pointer to use. Undone by
@@ -221,7 +277,8 @@ switch_bank:
 	pop bc
         ret
 
-
+; We are passed the pointer to the page data. We need the page2 value as
+; that holds our upper page.
 map_proc:
         ld a, h
         or l
@@ -357,7 +414,7 @@ bankina0:
 	jr z, __retmap1
 	dec a
 	jr z, __retmap2
-	cp #1			;  3  phys = logical 4
+	cp #2			;  3  phys = logical 4
 	jr z, __retmap4
 	jr __retmap3
 
@@ -456,10 +513,10 @@ __retmap4:
 	jp switch_bank
 __bank_4_2:
 	ld a, #1
-	jr bankina3
+	jr bankina4
 __bank_4_3:
 	ld a, #7
-	jr bankina3
+	jr bankina4
 
 
 ;
@@ -566,7 +623,7 @@ __stub_4_a:
 __stub_4_ret:
 	ex de, hl
 	call callhl
-	ld a,#2
+	ld a,#3
 	call switch_bank
 	pop de
 	push de		; dummy the caller will discard
