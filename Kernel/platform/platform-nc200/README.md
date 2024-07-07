@@ -1,24 +1,12 @@
-# Support for the Amstrad NC series of Z80 portable computers.
+# Support for the Amstrad NC200 series of Z80 portable computers.
 
 ## Supported Platforms
 
-* Amstrad NC100
-* Amstrad NC150	(use the NC100 image, no serial floppy support)
 * Amstrad NC200
 * Dreamwriter 225
 
-## Known Bugs
-
-* Suspend/Resume is broken on the NC100. On an NMI shutdown you'll not be able to get back
-
-Use:
-
-    TARGET=amstradnc/nc100 for the NC100
-    TARGET=amstradnc/nc200 for the NC200
-
-The NC100 supports hda on the PCMCIA card. The NC200 supports hda on the
-PCMCIA card and fd0 on the internal floppy drive (720kB standard PC formats).
-The 720kB image from fuzix.org will just work.
+The NC200 supports hda on the PCMCIA card and fd0 on the internal floppy drive
+(720kB standard PC formats). The 720kB image from fuzix.org will just work.
 
 Use 0 to boot from PCMCIA, 256 to boot from floppy. 
 
@@ -34,12 +22,9 @@ This will create the following image files in Images/amstradnc/...
 * fuzixroot.DSK: emulator floppy root image
 * pcmcia.img: raw image (can be used with emulator) of the PCMCIA card
 
-The floppy images are only created on the NC200 series machines. The
-PCMCIA image differs between the NC100 and NC200.
+The PCMCIA image differs between the NC100 and NC200.
 
 ## Installation to floppy
-
-NC200 only.
 
 Build the kernel and then dd `fuzixfloppy.img` to a raw 720kB floppy. dd a
 root file system to a different floppy. Start the NC200, insert the kernel
@@ -81,15 +66,11 @@ the system but as it currently lacks a disk change command you'll need to
 use the PCMCIA root file system. Unlike the NC100 you will need a set of
 genuine ROM images from your actual NC200.
 
-nc100 -r nc100.rom -p pcmcia.img
-
 nc200 -r nc200.rom -p pcmcia.img -A fuzixboot.DSK
 
-## NC100 memory map
+## NC200 memory map
 
 16K arbitrary banks.
-
-No CP/M emulation (due to NMI)
 
 	0x0000	Vectors  
 	0x0100  Application  
@@ -106,8 +87,6 @@ Overlaid with
 
 Overlaid at times with  
 	0x4000-0x7FFF video bank (vram used by ROM OS)
-
-NC200 is similar but CP/M should be possible
 
 On the PCMCIA card the layout looks like
 

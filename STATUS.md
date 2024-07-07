@@ -108,11 +108,11 @@ These platforms are unfinished experimental work anyway
 
 # Target Status
 
-Last updated 18/06/24
+Last updated 2024/07/04
 
 ## 2063
 
-Needs some size and layout tweaks then testing
+Builds, passes basic tests
 
 ## 68KNano
 
@@ -128,11 +128,11 @@ Passes basic tests.
 
 ## Amstrad NC100
 
-Pending
+Passes basic tests
 
 ## Amstrad NC200
 
-Pending
+Passes basic tests
 
 ## AppleIIe
 
@@ -157,7 +157,7 @@ Builds, needs a 0.5 test run
 
 ## COCO2 (64K, no cartridge)
 
-Fails. Needs 0.5 debug
+Builds, passes basic tests.
 
 ## COCO2Cart (64K with cartridge ROM)
 
@@ -165,7 +165,7 @@ Passes basic tests
 
 ## COCO3
 
-Fails to load init, under investigation. Needs fixing for 0.5
+Builds, passes basic tests
 
 ## CPM22
 
@@ -181,7 +181,7 @@ Passes basic tests
 
 ## Dragon (NX32)
 
-Fail in image building, needs fixing for 0.5
+Passes basic tests
 
 ## Dyno
 
@@ -213,7 +213,7 @@ Early WIP for TMS99xx. Needs compiler fixes and more yet
 
 ## Genie-EG64
 
-Builds, fails, needs fixing for 0.5
+Builds, passes basic tests
 
 ## IBMPC
 
@@ -229,7 +229,7 @@ Builds, not tested
 
 ## KC87
 
-Builds, test pending
+Builds, passes basic tests
 
 ## LINC80
 
@@ -261,11 +261,11 @@ Retired in 0.2, bitrotted
 
 ## MSX1
 
-Builds, test pending
+Builds, passes basic tests
 
 ## MSX2
 
-Builds, test pending
+Builds, passes basic tests
 
 ## MTX (Memotech)
 
@@ -297,7 +297,7 @@ Builds, passes basic tests
 
 ## PCW8256 (Amstrad)
 
-Builds, test pending
+Builds, passes basic tests
 
 ## PDP11
 
@@ -422,7 +422,7 @@ Builds, passes basic tests
 
 ## riz180 (Plasmo)
 
-Builds, boot fails, needs emulator debug
+Builds, passes basic tests
 
 ## rpipico (Rapsberry Pi Pico0
 
@@ -430,7 +430,7 @@ Builds
 
 ## sam (Sam Coupe)
 
-Builds, test pending
+Builds, passes basic tests
 
 ## sbc08k
 
@@ -438,7 +438,7 @@ Builds, passes basic tests
 
 ## sbc2g
 
-Builds, crashes when running. Under investigation
+Builds, passes basic tests
 
 ## sbcv2
 
@@ -522,11 +522,11 @@ Builds, passes basic tests
 
 ## TRS80m1 (Model 1/3)
 
-Builds, fails with supermem, works with selector. Debug in progress
+Builds, passes basic tests
 
 ## ubee (Microbee)
 
-Builds, test pending
+Builds, passes basic tests
 
 ## v65c816(-big)
 
@@ -554,11 +554,11 @@ Builds
 
 ## z1013 (Robotron)
 
-Builds, test pending
+Builds, passes basic tests
 
 ## z180itx (Etched Pixels)
 
-Builds, hangs after disk scan, debug in progress
+Builds, passes basic tests
 
 ## z280rc
 
@@ -578,7 +578,7 @@ Builds, usually passes basic tests, debugging a possible interrupt problem
 
 ## z80membership
 
-Builds, need to debug the emulator to do proper testing
+Builds,passes basic tests
 
 ## z80pack
 

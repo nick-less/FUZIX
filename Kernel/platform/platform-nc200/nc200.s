@@ -1,8 +1,8 @@
 ;
-;	    NC100 hardware support
+;	    NC200 hardware support
 ;
 
-            .module nc100
+            .module nc200
 
             ; exported symbols
             .globl init_early
@@ -63,9 +63,9 @@
             .globl outstring
             .globl outstringhex
 
-            .include "platform/kernel.def"
-            .include "../../kernel-z80.def" ; Kernel
-	    .include "nc100.def"
+            .include "kernel.def"
+            .include "../../cpu-z80/kernel-z80.def" ; Kernel
+	    .include "nc200.def"
 
 ; -----------------------------------------------------------------------------
 ; COMMON MEMORY BANK (0xF000 upwards)
@@ -152,10 +152,6 @@ probe_pcmcia:
 	    ret
 
 _program_vectors:
-	    ;
-	    ; Note: we must install an NMI handler on the NC100 FIXME
-	    ;
-
             ; we are called, with interrupts disabled, by both newproc() and crt0
 	    ; will exit with interrupts off
             di ; just to be sure
@@ -179,11 +175,6 @@ _program_vectors:
             ld (0x0038), a
             ld hl, #interrupt_handler
             ld (0x0039), hl
-
-            ; set restart vector for UZI system calls
-            ld (0x0030), a   ;  (rst 30h is unix function call vector)
-            ld hl, #unix_syscall_entry
-            ld (0x0031), hl
 
             ld (0x0000), a   
             ld hl, #null_handler   ;   to Our Trap Handler

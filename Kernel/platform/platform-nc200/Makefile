@@ -1,21 +1,21 @@
 CSRCS = \
-	../devfd.c \
-	../devlpr.c \
-	../devtty.c \
-	../devrd.c \
-	../devaudio.c \
-	../devgfx.c \
-	../devices.c \
-	../main.c \
-	../m146818.c \
-	../bank.c
+	devfd.c \
+	devlpr.c \
+	devtty.c \
+	devrd.c \
+	devaudio.c \
+	devgfx.c \
+	devices.c \
+	main.c \
+	m146818.c \
+	bank.c
 
 ASRCS = \
-	../nc100.s \
-	../crt0.s \
-	../tricks.s \
-	../commonmem.s \
-	../fdc765.s
+	nc200.s \
+	crt0.s \
+	tricks.s \
+	commonmem.s \
+	fdc765.s
 
 COBJS = $(CSRCS:.c=.rel)
 AOBJS = $(ASRCS:.s=.rel)
@@ -30,11 +30,12 @@ $(AOBJS): %.rel: %.s
 	$(CROSS_AS) $(ASOPTS) -o $@ $<
 
 clean:
-	rm -f $(OBJS) *.lst *.asm *.sym *.rst *.lk  core *~ 
+	rm -f $(OBJS) *.lst *.asm *.sym *.rst *.lk  core *~
+	rm -f *.rel *.ihx *.map
 	rm -f floppyskeleton.img autoprg.bin bootfloppy.img
 
-bootblock.img: ../bootblock.s
-	sdasz80 -fflopzws bootblock.rel ../bootblock.s
+bootblock.img: bootblock.s
+	sdasz80 -fflopzws bootblock.rel bootblock.s
 	sdldz80 -nwmx -b BOOTBLOCK=0 -i bootblock.ihx bootblock.rel
 	srec_cat -disable-sequence-warning \
                 bootblock.ihx -intel \

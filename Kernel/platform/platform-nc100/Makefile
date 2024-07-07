@@ -1,9 +1,9 @@
 
-CSRCS = ../devlpr.c ../devtty.c ../devrd.c ../devaudio.c ../devgfx.c
-CSRCS += ../devices.c ../main.c ../tc8521.c ../bank.c
+CSRCS = devlpr.c devtty.c devrd.c devaudio.c devgfx.c
+CSRCS += devices.c main.c tc8521.c bank.c
 
-ASRCS = ../nc100.s ../crt0.s
-ASRCS += ../tricks.s ../commonmem.s
+ASRCS = nc100.s crt0.s
+ASRCS += tricks.s commonmem.s
 
 COBJS = $(CSRCS:.c=.rel)
 AOBJS = $(ASRCS:.s=.rel)
@@ -19,9 +19,10 @@ $(AOBJS): %.rel: %.s
 
 clean:
 	rm -f $(OBJS) *.lst *.asm *.sym *.rst *.lk  core *~ 
+	rm -f *.ihx *.img *.map *.rel
 
-bootblock.img: ../bootblock.s
-	sdasz80 -fflopzws bootblock.rel ../bootblock.s
+bootblock.img: bootblock.s
+	sdasz80 -fflopzws bootblock.rel bootblock.s
 	sdldz80 -nwmx -b BOOTBLOCK=0 -i bootblock.ihx bootblock.rel
 	srec_cat -disable-sequence-warning \
                 bootblock.ihx -intel \

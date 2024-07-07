@@ -1,8 +1,8 @@
         .module tricks
 	.globl _udata
 
-        .include "platform/kernel.def"
-        .include "../../kernel-z80.def" ; Kernel
+        .include "kernel.def"
+        .include "../../cpu-z80/kernel-z80.def" ; Kernel
 
 TOP_PORT	.equ	0x13
 
