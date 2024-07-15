@@ -9,20 +9,20 @@ int main(int argc, char **argv)
 {
     if (argc == 1 || strcmp(argv[1], "--help") == 0)
     {
-        puts("usage: picoioctl [ --help ] <commmand>");
+        puts("usage: picoctl [ --help ] <commmand>");
         puts("Command list:");
         puts("\tflash\tReset into flash mode.");
         return 0;
     }
     int fd = open("/dev/sys", O_RDWR, 0);
-    if (!fd)
+    if (fd == -1)
     {
-        puts("Failed to open /dev/sys.");
+        perror("Failed to open /dev/sys");
         exit(1);
     }
     if (ioctl(fd, PICOIOC_FLASH) != 0)
     {
-        puts("Failed to perform operation.");
+        perror("Failed to perform operation");
         close(fd);
         exit(1);
     }

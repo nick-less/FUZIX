@@ -8,6 +8,11 @@
  *      TX  GPIO 15
  *      RX  GPIO 12
  *      CS  GPIO 13
+ *  CONFIG_MAKER_PI
+ *	SCK GPIO 10
+ *	TX  GPIO 11
+ *	RX  GPIO 12
+ *	CS  GPIO 15
  *  If Undefined
  *      SCK GPIO 2
  *      TX  GPIO 3
@@ -17,6 +22,8 @@
 
 #define CONFIG_RC2040
 
+/* We have a GPIO interface */
+#define CONFIG_DEV_GPIO
 /* Enable to make ^Z dump the inode table for debug */
 #undef CONFIG_IDUMP
 /* Enable to make ^A drop back into the monitor */
