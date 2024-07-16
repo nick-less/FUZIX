@@ -176,9 +176,11 @@ irq_on:
 
 
 rebootit:
-	ldaa	#0x88
-	staa	0xF000		; ROM enable
-	jmp	0
+	ldaa	#0x10
+	staa	MLATCH		; Switch to bank 0
+	sei
+	ldx	0xFFFE
+	jmp	,x
 
 ;
 ;	TODO: .discard ?
@@ -202,7 +204,17 @@ init_hardware:
 	std procmem
 	; set DDRA7 to A7 is an output (second CS line)
 	bset 0x26,x 0x80
-        jsr program_vectors_k
+	ldx #vectors
+	ldy #0xF000-60	; 20 vectors
+nvec:
+	ldd ,x
+	std ,y
+	inx
+	inx
+	iny
+	iny
+	cpy #0xF000
+	bne nvec
 
 	; copy bank 0 common to all other banks
 	; interrupts are off - we have no valid stack during the copy
@@ -223,29 +235,34 @@ copy_copier:
 	bne	copy_copier
 	jsr	0xF040
 
-	; All common banks now have the same data in F200-FFFF
-	rts
+	; All common banks now have the same data in E200-EFFF
 
+	; Set up the cached memory bank info
+	jmp	map_kernel_di
+
+;
+;	TODO rewrite me for the M8 and use the 32K split for the copy 
+;
 
 copy_helper:
-	ldx	#IOBASE
-	ldy	#0xF200
+	ldx	#MLATCH
+	ldy	#0xE200
 copyall:
-	ldab	#0x88
+	ldab	#0x10
 	stab	,x
 	ldaa	,y
-	ldab	#0x98
+	ldab	#0x32
 	; Copy ,y into each other bank
 nbank:
 	stab	,x
 	staa	,y
-	addb	#0x10
-	bmi	nbank		; when we wrap we are done
+	addb	#0x22
+	bcc	nbank		; when we wrap we are done
 	iny
 	;	Next byte
-	cpy	#0x0000
+	cpy	#0xF000
 	bne	copyall
-	ldaa	#0x88
+	ldaa	#0x10
 	staa	,x		; kernel map
 	rts
 
@@ -287,35 +304,31 @@ program_vectors:
 	;	We set these up in the kernel map once
 	;	the copy the common blocks to each bank
 	;
-program_vectors_k:
-	ldd	#system_fail
-	std	0xFFFC		; COP fail
-	std	0xFFFA		; watchdog timeout
-	ldd	#trap_handler
-	std	0xFFF8		; illegal instruction trap
-	ldd	#common_syscall
-	std	0xFFF6		; SWI vector
-	ldd	#nmi_handler
-	std	0xFFF4		; NMI vector
-	ldd	#common_intr
-	std	0xFFF2		; Interrupt from rcbus
-	std	0xFFE6		; TOC2
-	ldd	#sci_intr
-	std	0xFFD6		; Interrupt from SCI serial
-	ldd	#nullirq
-	std	0xFFF0		; Interrupt from RTI (RTI overflow)
-	std	0xFFEE		; TC1
-	std	0xFFEA		; TC2
-	std	0xFFE8		; TOC1
-	std	0xFFE4		; TOC3
-	std	0xFFE2		; TOC4
-	std	0xFFE0		; TIC4/TOC5
-	std	0xFFDE		; Timer overflow
-	std	0xFFDC		; Pulse accumulator overflow
-	std	0xFFDA		; Pulse accumulator input edge
-	std	0xFFD8		; SPI transfer complete
-	rts
-
+	;	The monitor forwards all interrupts (except reset)
+	;	to jmps in the top of memory (current bank).
+	;
+vectors:
+	jmp	sci_intr	; SCI serial interrupt		FFD6
+	jmp	nullirq		; SPI transfer complete		FFD8
+	jmp	nullirq		; Pulse accumulator input edge	FFDA
+	jmp	nullirq		; Pulse accumulator overflow	FFDC
+	jmp	nullirq		; Timer overflow		FFDE
+	jmp	nullirq		; TIC4/TOC5			FFE0
+	jmp	nullirq		; TOC4				FFE2
+	jmp	nullirq		; TOC3				FFE4
+	jmp	common_intr	; TOC2				FFE6
+	jmp	nullirq		; TOC1				FFE8
+	jmp	nullirq		; TIC3				FFEA
+	jmp	nullirq		; TIC2				FFEC
+	jmp	nullirq		; TIC1				FFEE
+	jmp	nullirq		; RTI overflow			FFF0
+	jmp	common_intr	; External interrupt		FFF2
+	jmp	nmi_handler	; NMI vector (XIRQ)		FFF4
+	jmp	common_syscall	; SWI vector			FFF6
+	jmp	trap_handler	; Illegal instruction		FFF8
+	jmp	system_fail	; Watchdog timeout		FFFA
+	jmp	system_fail	; COP fail			FFFC
+	; Reset is not forwarded				FFFE
 
 ;------------------------------------------------------------------------------
 ; COMMON MEMORY PROCEDURES FOLLOW
@@ -337,7 +350,8 @@ map_proc_always:
 map_proc_always_di:
 	psha
 	ldaa	udata + U_DATA__U_PAGE+1	; big endian
-	staa	IOBASE		; switch bank
+	staa	shared_mlatch
+	staa	MLATCH		; switch bank
 	pula
 	rts
 ;
@@ -352,14 +366,16 @@ map_proc:
 map_kernel_di:
 map_kernel:
 	psha
-	ldaa	#0x88
-	staa	IOBASE		; switch to kernel
+	ldaa	#0x10
+	staa	shared_mlatch
+	staa	MLATCH		; switch to kernel
 	pula
 	rts
 
 map_proc_2:
 	ldaa	1,x
-	staa	IOBASE
+	staa	shared_mlatch
+	staa	MLATCH
 	rts
 ;
 ;	Restore mapping.
@@ -367,7 +383,8 @@ map_proc_2:
 map_restore:
 	psha
 	ldaa	shared_map
-	staa	IOBASE
+	staa	shared_mlatch
+	staa	MLATCH
 	pula
 	rts
 
@@ -376,10 +393,10 @@ map_restore:
 ;
 map_save_kernel:
 	psha
-	ldaa	IOBASE
+	ldaa	shared_mlatch
 	staa	shared_map
-	ldaa	#0x88
-	staa	IOBASE
+	ldaa	#0x10
+	staa	MLATCH
 	pula
 	rts
 
@@ -413,13 +430,13 @@ sci_rxl:
 sci_err:
 	.byte 0
 sci_rxp:
-	.word 0xFE00
+	.word 0xEE00
 sci_rxe:
-	.word 0xFE00
+	.word 0xEE00
 sci_txp:
-	.word 0xFE80
+	.word 0xEE80
 sci_txe:
-	.word 0xFE80
+	.word 0xEE80
 
 ;
 ;	SD card
@@ -501,8 +518,6 @@ sd_spi_fast:
 ;	We have to deal with thunked mappings here. That means
 ;	whilst we are doing the block we will have no valid stack
 ;
-;	TODO interrupt save/restore correctly
-;
 sd_spi_tx_sector:
 	xgdy			; pointer into Y
 	tpa
@@ -514,11 +529,11 @@ sd_spi_tx_sector:
 	deca
 	beq	from_u
 	ldaa	td_page
-	staa	,x		; Stack now invalid be careful
+	staa	MLATCH		; Stack now invalid be careful
 	bra from_k
 from_u:
 	ldaa	udata+U_DATA__U_PAGE+1
-	staa	,x		; User map
+	staa	MLATCH		; User map
 from_k:
 	clra
 txloop:
@@ -537,8 +552,8 @@ txw2:
 	tst	0x2A,x		; Read data
 	deca
 	bne	txloop
-	ldaa	#0x88
-	staa	,x		; Kernel back in , stack now valid
+	ldaa	shared_mlatch
+	staa	MLATCH		; Kernel back in , stack now valid
 	pula
 	tap			; restore int flag
 	rts
@@ -555,11 +570,11 @@ sd_spi_rx_sector:
 	deca
 	beq	to_u
 	ldaa	td_page
-	staa	,x
+	staa	MLATCH
 	bra	to_k
 to_u:
 	ldaa	udata+U_DATA__U_PAGE+1
-	staa	,x
+	staa	MLATCH
 to_k:
 	clra
 rxloop:
@@ -581,8 +596,8 @@ rxw2:
 
 	deca
 	bne	rxloop
-	ldaa	#0x88
-	staa	,x
+	ldaa	shared_mlatch
+	staa	MLATCH
 	pula	
 	tap
 	rts
@@ -610,10 +625,10 @@ _uputc:
 	psha
 	sei
 	ldaa udata+U_DATA__U_PAGE+1
-	staa IOBASE
+	staa MLATCH
 	stab 0,x
-	ldaa #0x88
-	staa IOBASE
+	ldaa shared_mlatch
+	staa MLATCH
 	pula
 	tap
 	rts
@@ -626,11 +641,11 @@ _uputw:
 	psha
 	sei
 	ldaa udata+U_DATA__U_PAGE+1
-	staa IOBASE
+	staa MLATCH
 	xgdy		; data back into D
 	std 0,x
-	ldaa #0x88
-	staa IOBASE
+	ldaa shared_mlatch
+	staa MLATCH
 	pula
 	tap
 	rts
@@ -641,10 +656,10 @@ _ugetc:
 	psha
 	ldaa udata+U_DATA__U_PAGE+1
 	sei
-	staa IOBASE
+	staa MLATCH
 	ldab 0,x
-	ldaa #0x88
-	staa IOBASE
+	ldaa shared_mlatch
+	staa MLATCH
 	pula
 	tap
 	clra
@@ -656,11 +671,11 @@ _ugetw:
 	psha
 	ldaa udata+U_DATA__U_PAGE+1
 	sei
-	staa IOBASE
+	staa MLATCH
 	ldd 0,x
 	xgdx
-	ldaa #0x88
-	staa IOBASE
+	ldaa shared_mlatch
+	staa MLATCH
 	pula
 	tap
 	xgdx
@@ -675,7 +690,7 @@ _uzero:
 	psha
 	sei
 	ldaa udata+U_DATA__U_PAGE+1
-	staa IOBASE
+	staa MLATCH
 
 	; Optimize, unroll etc ?
 uzerolp:
@@ -683,8 +698,8 @@ uzerolp:
 	inx
 	dey
 	bne uzerolp
-	ldaa #0x88
-	staa IOBASE
+	ldaa shared_mlatch
+	staa MLATCH
 	pula
 	tap
 	clra
@@ -705,11 +720,11 @@ _uget:
 	sei
 ugetl:
 	ldab	udata+U_DATA__U_PAGE+1
-	stab	IOBASE
+	stab	MLATCH
 	ldab	,y
 	iny
-	ldaa	#0x88
-	staa	IOBASE
+	ldaa	#0x10
+	staa	MLATCH
 	stab	,x
 	inx
 	cpy	__end
@@ -738,11 +753,11 @@ uputl:
 	ldab	,y
 	iny
 	ldaa	udata+U_DATA__U_PAGE+1
-	staa	IOBASE
+	staa	MLATCH
 	stab ,x
 	inx
-	ldaa	#0x88
-	staa	IOBASE
+	ldaa	#0x10
+	staa	MLATCH
 	cpy	__end
 	bne	uputl
 	pula
