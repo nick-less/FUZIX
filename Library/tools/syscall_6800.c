@@ -36,7 +36,7 @@ static void write_call(int n)
   fprintf(fp, "noerror:\n");
   /* Non varargs functions do their own tail clean up */
   if (syscall_args[n])
-    fprintf(fp, "\tjmp ret%d\n", syscall_args[n] * 2);
+    fprintf(fp, "\tjmp __popret%d\n", syscall_args[n] * 2);
   else
     fprintf(fp, "\trts\n");
   fclose(fp);
@@ -97,7 +97,7 @@ static void write_makefile(void)
   fprintf(fp, "\techo $(AOBJS) >syslib.l\n");
   fprintf(fp, "\tar rc ../syslib.lib $(AOBJS)\n\n");
   fprintf(fp, "$(AOBJS): %%.o: %%.s\n");
-  fprintf(fp, "\tas68 $<\n\n");
+  fprintf(fp, "\tfcc -m6800 -c -o $*.o $<\n\n");
   fprintf(fp, "clean:\n");
   fprintf(fp, "\trm -f $(AOBJS) $(ASRCS) *~\n\n");
   fclose(fp);
