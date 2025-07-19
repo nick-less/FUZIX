@@ -43,7 +43,7 @@ __uzero:
 	ld	ea,2,p1
 	ld	p3,ea
 	ld	ea,4,p1
-	add	ea,=0x010	; inc high half
+	add	ea,=0x0100	; inc high half
 	add	a,=0x01		; inc low half
 	st	ea,:__tmp
 	
@@ -70,11 +70,12 @@ zloop:
 __uget:
 	ld	ea,4,p1
 	ld	p2,ea		; copy to p2
-	ld	ea,6,p1
+	ld	ea,2,p1
 	ld	p3,ea		; from p3
-	ld	ea,2,p1		; for ea bytes
+	ld	ea,6,p1		; for ea bytes
 	add	ea,=0x0100
 	add	a,=0x01
+	st	ea,:__tmp
 	bra	ugnext
 
 ugloop:
@@ -92,16 +93,14 @@ ugnext:
 	ret
 
 __uput:
-	; This one is harder as we've got to juggle two pointers
-	; We can optimize this a lot by abusing the stack etc but
-	; start simple. Take care as tmp/to/from are kernel mapped
 	ld	ea,4,p1
 	ld	p2,ea		; copy to p2
-	ld	ea,6,p1
+	ld	ea,2,p1
 	ld	p3,ea		; from p3
-	ld	ea,2,p1		; for ea bytes
+	ld	ea,6,p1		; for ea bytes
 	add	ea,=0x0100
 	add	a,=0x01
+	st	ea,:__tmp
 	bra	upnext
 
 uploop:
