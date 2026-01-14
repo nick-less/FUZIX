@@ -1018,7 +1018,7 @@ int f_trunc(regptr inoptr ino)
 void freeblk(uint16_t dev, blkno_t blk, uint_fast8_t level, uint16_t nblock)
 {
     struct blkbuf *buf;
-    regptr blkno_t *bn;
+    blkno_t bn;
     int16_t j;
     int_fast8_t nblock1 = nblock >> 8;
 
@@ -1036,7 +1036,7 @@ void freeblk(uint16_t dev, blkno_t blk, uint_fast8_t level, uint16_t nblock)
             if (j == nblock1)
                 b = nblock & 0xFF;
             blktok(&bn, buf, j * sizeof(blkno_t), sizeof(blkno_t));
-            freeblk(dev, bn[j], level - 1, b);
+            freeblk(dev, bn, level - 1, b);
         }
         brelse(buf);
     }

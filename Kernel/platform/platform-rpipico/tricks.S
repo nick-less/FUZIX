@@ -80,9 +80,9 @@ isr_svcall_user:
 .comm svc_pc_stash, 4
 
 .global plt_switchout
-.global switchin
 .text
 .thumb_func
+
 plt_switchout:
 	/* Save the callee-saved registers onto the stack in the same order
 	 * that switchout will do it, so switchin will restore it correctly. */
@@ -112,6 +112,9 @@ plt_switchout:
 	/* Fall through into switchin */
 
     /* On entry, r0 is the ptab ptr of the process to run */
+.global switchin
+.text
+.thumb_func
 switchin:
     ldr r1, =__StackTop     /* switch to swapper stack */
     mov sp, r1
